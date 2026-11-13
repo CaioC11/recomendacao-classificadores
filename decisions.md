@@ -311,15 +311,11 @@ Efeito da limpeza:
 - O ranking pode mudar com outros runs: o teto de Spearman só mede o ruído do sorteio
 
 ## 15. Pendências
-- Decidir a métrica principal de avaliação do recomendador (seção 13)
-- Decidir o tratamento dos NaN residuais do pymfe e a imputação definitiva (semana 2)
-- Rodar o pymfe nas 60 bases, a fração de faltantes como metacaracterística e a
-  sensibilidade com kNN-imputer (semana 2)
-- Curva do máximo esperado em função de k (1, 3, 10, 30) por família, como medida de
-  sensibilidade ao tuning (opcional)
-- Comparar o max_sub3 com a esperança exata do máximo de 3 runs (opcional)
-- Confirmar a causa dos faltantes em bloco (a divisão temporal já está medida)
-- Contar os runs das demais famílias weka faltantes em 14952 e 14954 (opcional)
-- Investigar o resíduo da task 3022 e as correlações baixas das bases 29 e 28
-- Corrigir a decisão de aceitar flows do mlr no relatório (a decisão 4 original só
-  previa sklearn e weka)
+- **Extração das metacaracterísticas (`pymfe`):** calcular os grupos `general`, `statistical` e `info-theory` (com codificação `one-hot-full`) para as 60 bases, incluindo a fração de valores faltantes como metacaracterística.
+- **Pré-processamento das metacaracterísticas:** definir o tratamento definitivo dos `NaN` residuais, infinitos e colunas constantes (avaliando a sensibilidade com `kNN-imputer`) e aplicar normalização antes do cálculo de distâncias.
+- **Baseline de ranking médio:** implementar o recomendador de referência baseado no ranking médio das famílias no conjunto de treino.
+- **Recomendador $k$-NN e validação LODO:** implementar a busca por vizinhos ($k = 1, 3, 5, 10$) e estruturar o protocolo *leave-one-dataset-out* (garantindo que a base de teste não entre no treino nem na normalização).
+- **Métricas de avaliação (Seção 13):** fechar as métricas principais do recomendador (correlação de Spearman, posição real e arrependimento em AUC) no núcleo principal (`45 × 17`).
+- **Comparação binária vs. multiclasse (feedback profa. Juscimara):** estratificar a avaliação do recomendador entre bases binárias (31) e multiclasse (29) para verificar diferenças de comportamento ou escala entre os dois cenários.
+- **Sensibilidade com acurácia vs. AUC (feedback profa. Juscimara):** extrair a tabela de desempenho com acurácia (`predictive_accuracy`) e rodar o recomendador como análise de sensibilidade comparada à AUC, aproveitando sua escala única entre problemas binários e multiclasse.
+- **Avaliação nas sensibilidades já construídas na Fase 1:** rodar o recomendador sobre as tabelas alternativas já geradas (`tab_med` com mediana, `tab_sub3_sem_limpeza` sem descarte de `Dummy`/`ZeroR` e `58 × 22` completa sem imputação).
