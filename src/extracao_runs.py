@@ -2,21 +2,21 @@
 Extração completa dos runs do OpenML (métrica: AUC) das tasks selecionadas.
 
 Uso (rode da raiz do repositório, com o .venv ativado):
-    python src/extracao_runs.py --task 167140     # teste rápido (1 task pequena)
-    python src/extracao_runs.py --fase 1          # fase 1: tasks com até 70.000 runs
-    python src/extracao_runs.py --fase 2          # fase 2: tasks maiores
-    python src/extracao_runs.py --fase todas      # tudo, das menores para as maiores
+    python src/extracao_runs.py --task 167140     #teste rápido (1 task pequena)
+    python src/extracao_runs.py --fase 1          #fase 1: tasks com até 70.000 runs
+    python src/extracao_runs.py --fase 2          #fase 2: tasks maiores
+    python src/extracao_runs.py --fase todas      #tudo, das menores para as maiores
 
 Pode ser interrompido (Ctrl+C) e rodado de novo: continua de onde parou.
 Rode uma fase de cada vez (dois processos ao mesmo tempo disputam o flows.csv).
 Não abra o flows.csv em outro programa enquanto o script roda.
 
-Entrada : <dados>/contagem_runs.csv        (colunas: tid, runs_aprox)
-Saída   : <dados>/runs/task_<tid>/pagina_<offset>.csv.gz
+Entrada : <data>/contagem_runs.csv        (colunas: tid, runs_aprox)
+Saída   : <data>/runs/task_<tid>/pagina_<offset>.csv.gz
               (colunas: run_id, setup_id, flow_id, value, upload_time)
-          <dados>/runs/task_<tid>/COMPLETA  (marca a task como terminada)
-          <dados>/flows.csv                 (flow_id -> flow_name)
-          <dados>/extracao.log
+          <data>/runs/task_<tid>/COMPLETA  (marca a task como terminada)
+          <data>/flows.csv                 (flow_id -> flow_name)
+          <data>/extracao.log
 """
 import argparse
 import os
@@ -155,7 +155,7 @@ def main():
     ap = argparse.ArgumentParser(description="Extração de runs do OpenML (AUC)")
     ap.add_argument("--fase", choices=["1", "2", "todas"], default="1")
     ap.add_argument("--task", type=int, help="baixa só esta task (teste)")
-    ap.add_argument("--dados", default="dados", help="pasta de dados (padrão: dados)")
+    ap.add_argument("--dados", default="data", help="pasta de dados (padrão: dados)")
     ap.add_argument("--limite-fase1", type=int, default=70_000,
                     help="a fase 1 pega tasks com até este nº de runs (padrão: 70000)")
     args = ap.parse_args()

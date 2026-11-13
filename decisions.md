@@ -1,6 +1,6 @@
 # Decisões de desenho do experimento (versão definitiva)
 
-Última atualização: 07/nov/2026. Cada decisão traz o motivo e os números que a sustentam.
+Última atualização: 12/nov/2026. Cada decisão traz o motivo e os números que a sustentam.
 Itens marcados com **(a confirmar)** são hipóteses ou escolhas ainda em aberto. A seção 16
 lista o que mudou em relação à versão anterior.
 
@@ -19,11 +19,14 @@ lista o que mudou em relação à versão anterior.
   parte da sensibilidade ao desbalanceamento
 - Runs com AUC exatamente 0,5 (predição constante): verificado, ver seção 7
   (média de 5,34% dos runs por task, máximo 31,56%)
+- Evidência: 01_selecao_bases.ipynb, Seção 2 (exec 21 e 23, proporção de AUC == 0,5). A verificação multiclasse da task 11 foi feita em teste avulso fora deste notebook.
+- Composição das 60 tasks: 31 binárias e 29 multiclasse (de 3 a 26 classes); os resultados do recomendador serão reportados também estratificados entre binárias e multiclasse.
 
 ## 2. Fonte das bases
 - Suíte OpenML-CC18 (72 tasks de classificação curadas)
 - Justificativa: suíte padrão da literatura, procedimento de avaliação uniforme
   (as 72 tasks usam 10-fold cross-validation)
+- Evidência: 01_selecao_bases.ipynb, Seção 1 (exec 1–6).
 
 ## 3. Filtros de seleção
 - Instâncias: 500 a 50.000 (custo do pymfe na semana 2)
@@ -52,6 +55,7 @@ lista o que mudou em relação à versão anterior.
 - Risco: nomes de módulos sklearn antigos sugerem runs de versões antigas da biblioteca
 - Famílias meta (bagging, adaboostm1, attributeselectedclassifier) agrupam estimadores
   internos variados; a família é "o estimador externo"
+- Evidência: 01_selecao_bases.ipynb, Seção 3 (exec 35–42 e 52).
 
 ## 5. Agregação (revisada em 06/nov/2026)
 - Nível: um valor por (task, família de classificador)
@@ -63,6 +67,7 @@ lista o que mudou em relação à versão anterior.
 - Motivo: poucos flows concentram muitos runs (350 runs de um único pipeline na task 3)
 - Limitações: o máximo cresce com o número de runs (viés de volume) e a mediana depende
   de quais configurações foram submetidas
+- Evidência: 01_selecao_bases.ipynb, Seção 4 (exec 53–56).
 
 ---
 
@@ -77,6 +82,7 @@ lista o que mudou em relação à versão anterior.
 - Exemplo: task 3 tem 173.304 runs e 927 flows distintos (~15 min para baixar)
 - Dados em `data/runs/task_<id>/` (páginas csv.gz e arquivo COMPLETA). As colunas são
   run_id, setup_id, flow_id, value e upload_time; o nome do flow vem de `flows.csv`
+- Evidência: 01_selecao_bases.ipynb, Seção 1 (exec 7–16) e Seção 2 (exec 17–22).
 
 ## 7. Limpeza dos runs (v3)
 Problema: valores constantes perto de 0,5 repetidos em centenas ou milhares de runs
@@ -89,11 +95,9 @@ Passos:
 2. Regra por task: dentro de cada task, valor arredondado em 4 casas entre 0,47 e 0,53
    com >= 200 runs e >= 0,5% da task; remove runs a até 0,0005 dele. 127 pares em 54
    tasks, 823.307 runs. União com o passo 1: 3.624.525 -> 2.800.528 (v2)
-3. Segunda passada com 3 casas: 55 pares extras em 22 tasks (24.792 runs). A task 3560
-   (mediana 0,547) ficou de fora por ser ambígua. v3 = v2 menos esses extras:
-   **2.778.717 runs** (845.808 removidos no total, 23,3%); menor n por task = 4.679
-- Resíduo conhecido: task 3022 mantém 8,96% de runs < 0,5 com valores espalhados
-  (problema de outro tipo, a investigar pelos flows) **(a confirmar)**
+3. Segunda passada com 3 casas: 55 pares extras detectados em 22 tasks (24.792 runs). A task 3560 (mediana 0,547; 2.981 runs) ficou de fora por ser ambígua, resultando em 21.811 runs efetivamente removidos. v3 = v2 menos esses extras: 2.778.717 runs (845.808 removidos no total, 23,3%); menor n por task = 4.679
+- Resíduo explicado: task 3022 (vowel, 11 classes) mantém 8,96% (1.498 runs) com AUC < 0,5 espalhados em flows do sklearn (BernoulliNB, GradientBoosting, DecisionTree, SVC), confirmando que a regra preserva classificadores genuinamente ruins sem pico constante.
+- Mecanismo dos picos < 0,5: verificado na task 3903 que a AUC teórica de um preditor constante usando a prior de treino por fold (com predições agrupadas) é 0,499252, coincidindo com o valor modal observado em 47.315 runs (0,4993).
 - Arquivos: `runs_consolidado.parquet` (sem limpeza), `runs_limpos_v3.parquet`
 
 Validação da regra (nas 22 famílias finais):
@@ -117,6 +121,7 @@ Efeito da limpeza:
   mlr:rpart (8 das 10 maiores) e sklearn:GradientBoostingClassifier
 - Decisão: limpeza mantida e tratada como parte do método. O max_sub3 limpo mede o
   máximo esperado de 3 runs **funcionais**. Sensibilidade: `tab_sub3_sem_limpeza`
+- Evidência: 01_selecao_bases.ipynb, Seção 2 (exec 21–33) e Seção 6 (exec 74–78).
 
 ## 8. Famílias, mínimo de runs por célula e corte de cobertura
 - 657 famílias distintas antes do corte. Removidos 2.377 runs sem família (0,09%):
@@ -147,6 +152,7 @@ Efeito da limpeza:
 - sklearn:FKCEigenPro: pacote sklearn_extra (`fast_kernel`), 50.604 runs, 60 bases,
   3 flows (imputação, com ou sem padronização, e uma versão com a classe renomeada
   FKC_EigenPro -> FKCEigenPro), 14.913 setups; agrupada como uma família
+- Evidência: 01_selecao_bases.ipynb, Seção 3 (exec 45–51).
 
 ## 9. Viés do número de runs, ruído e agregação principal
 - O máximo cresce com o número de runs: correlação de Spearman entre n e o máximo por
@@ -158,8 +164,7 @@ Efeito da limpeza:
 - Ruído do sorteio, duas medições:
   - R = 200, entre duas sementes (tabelas de comparação com e sem limpeza): mediana
     0,0003, p95 0,0048, máx. 0,028. É o limiar usado em "mudam acima do ruído" (seção 7).
-    A estatística exata (diferença absoluta entre duas sementes) deve ser confirmada no
-    notebook **(a confirmar)**
+   Confirmado: diferença absoluta entre duas sementes (1 e 2), R = 200 (01_selecao_bases.ipynb, Seção 5, exec 73, e Seção 6, exec 74 e 76).
   - Na `tab_sub3` (R = 100, 5 sementes, 1.114 células): desvio-padrão por célula entre
     sementes com mediana 0,00066, média 0,0015, p95 0,0059 e máx. 0,0217; maior
     amplitude (máx. - mín.) numa célula 0,058. As duas medições usam estatísticas e
@@ -192,6 +197,7 @@ Efeito da limpeza:
   sensibilidade** (busca extensa de hiperparâmetros). O recomendador é avaliado nas duas
 - Opcional: a esperança exata do máximo de 3 runs (soma de v(i) · C(i-1, 2) / C(n, 3) sobre
   os valores ordenados) elimina o sorteio; só vale a pena se a tabela for refeita
+- Evidência: 01_selecao_bases.ipynb, Seção 4 (exec 53–57), Seção 5 (exec 73) e Seção 6 (exec 79–81 e 90–93).
 
 ## 10. Tabelas base × família (`dados/tabelas/`)
 - `tab_sub3` (60 × 22), `tab_max` (sensibilidade), `tab_med` (mediana) e `tab_n` (nº de
@@ -201,6 +207,7 @@ Efeito da limpeza:
   `tab_sub3_limpo_mesma_semente` (contraparte com a mesma semente), para comparar
   limpeza sem diferença de sorteio. Não misturar com `tab_sub3` (semente 42, R = 100)
 - `nucleo_sub3`, `tab_sub3_sem_fracas` e `nucleo_sub3_sem_fracas` (seções 11 e 12)
+- Evidência: 01_selecao_bases.ipynb, Seção 4 (exec 63–64), Seção 5 (exec 72) e Seção 6 (exec 77 e 82–83).
 
 ## 11. Células faltantes
 - Distribuição: weka 150 dos 206, mlr 30, sklearn 26. As 6 famílias do sklearn sem
@@ -212,7 +219,7 @@ Efeito da limpeza:
   - Divisão temporal: as 46 têm primeiro run entre abr/2014 e abr/2016; as 14, entre
     out/2016 e abr/2018 (mediana 21/02/2018), sem sobreposição. O corte é pela data dos
     runs, não pelo task_id (14952 e 14954 têm task_id baixo, mas pertencem ao bloco tardio)
-  - Volume: 98% dos runs do weka e 92% dos do mlr são de até 2017; as 14 bases receberam
+  - Volume: 97,8% dos runs do weka e 99,9% dos do mlr (102.859 de 102.942) são de até 2017; as 14 bases receberam
     104 dos 18.987 runs do weka (0,5%) e 2.057 dos 102.942 do mlr (2%)
   - Causa provável: o lote de tarefas de 2018 surgiu depois da atividade dessas
     bibliotecas **(não verificada)**
@@ -243,6 +250,7 @@ Efeito da limpeza:
 - Número de faltantes **não** entra como metacaracterística (não existe para uma base
   nova); serve só como diagnóstico
 - Outras sensibilidades: corte de 75% (19 famílias)
+- Evidência: 01_selecao_bases.ipynb, Seção 5 (exec 65–72) e Seção 6 (exec 84–89).
 
 ## 12. Bases fracas e saturação
 - Bases fracas: 3560 (melhor máximo 0,599; todas as famílias entre 0,52 e 0,60) e
@@ -256,6 +264,7 @@ Efeito da limpeza:
   (máx. 15). Empates tratados com postos médios (padrão do Spearman)
 - Bases com correlação de ranking baixa entre dado limpo e bruto: 125920 (0,69),
   23 (0,81), 29, 28 e 3902 (a 29 e a 28 sem explicação ainda)
+- Evidência: 01_selecao_bases.ipynb, Seção 4 (exec 60–62) e Seção 6 (exec 76 e 82).
 
 ## 13. Metacaracterísticas (pymfe) e avaliação (semana 2)
 - pymfe com grupos general, statistical e info-theory (73 metacaracterísticas);
@@ -285,10 +294,10 @@ Efeito da limpeza:
 - Reportar no total e por grupo (bases completas e bases só-sklearn) nas variantes com
   faltantes. Para o baseline nessas variantes, usar posto normalizado pelo nº de
   famílias da base ou o núcleo (o posto bruto mistura bases de 7 a 22 famílias)
+- Evidência: 02_pymfe_testes.ipynb (testes preliminares de codificação, instabilidade de attr_conc e atributos categóricos/faltantes).
 
 ## 14. Limitações a declarar no relatório
-- O max_sub3 mede o desempenho com poucas tentativas e penaliza famílias sensíveis a
-  hiperparâmetros; o máximo completo favorece famílias com mais runs
+- Os runs do OpenML não vêm de um experimento controlado: mesmo controlando o volume com o max_sub3 (k = 3), a métrica mistura a qualidade intrínseca da família com quais configurações alguém optou por submeter. Além disso, o max_sub3 penaliza famílias sensíveis a hiperparâmetros, enquanto o máximo completo favorece famílias com mais runs (a mediana tab_med será avaliada como sensibilidade).
 - O resultado depende da regra de limpeza (afeta ~15% das células no max_sub3)
 - Famílias populares abaixo do corte de cobertura (xgboost, lightgbm) ficam fora
 - Faltantes em bloco: 14 bases (runs de out/2016 a abr/2018) só têm famílias do
@@ -314,6 +323,5 @@ Efeito da limpeza:
 - Confirmar a causa dos faltantes em bloco (a divisão temporal já está medida)
 - Contar os runs das demais famílias weka faltantes em 14952 e 14954 (opcional)
 - Investigar o resíduo da task 3022 e as correlações baixas das bases 29 e 28
-- Confirmar a estatística do ruído com R = 200 (seção 9)
 - Corrigir a decisão de aceitar flows do mlr no relatório (a decisão 4 original só
   previa sklearn e weka)
