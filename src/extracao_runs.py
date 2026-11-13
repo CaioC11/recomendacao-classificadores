@@ -1,35 +1,14 @@
-"""
-Extração completa dos runs do OpenML (métrica: AUC) das tasks selecionadas.
-
-Uso (rode da raiz do repositório, com o .venv ativado):
-    python src/extracao_runs.py --task 167140     #teste rápido (1 task pequena)
-    python src/extracao_runs.py --fase 1          #fase 1: tasks com até 70.000 runs
-    python src/extracao_runs.py --fase 2          #fase 2: tasks maiores
-    python src/extracao_runs.py --fase todas      #tudo, das menores para as maiores
-
-Pode ser interrompido (Ctrl+C) e rodado de novo: continua de onde parou.
-Rode uma fase de cada vez (dois processos ao mesmo tempo disputam o flows.csv).
-Não abra o flows.csv em outro programa enquanto o script roda.
-
-Entrada : <data>/contagem_runs.csv        (colunas: tid, runs_aprox)
-Saída   : <data>/runs/task_<tid>/pagina_<offset>.csv.gz
-              (colunas: run_id, setup_id, flow_id, value, upload_time)
-          <data>/runs/task_<tid>/COMPLETA  (marca a task como terminada)
-          <data>/flows.csv                 (flow_id -> flow_name)
-          <data>/extracao.log
-"""
 import argparse
 import os
 import time
 from datetime import datetime
-
 import openml
 import pandas as pd
 
 FUNCAO = "area_under_roc_curve"
-LOTE = 1000                       # limite por requisição aceito pelo servidor
-MAX_OFFSET = 700_000              # trava de segurança (a maior task tem ~415.000 runs)
-ESPERAS = [5, 15, 30, 60, 120]    # segundos de espera entre tentativas
+LOTE = 1000
+MAX_OFFSET = 700_000
+ESPERAS = [5, 15, 30, 60, 120]
 COLUNAS_RUNS = ["run_id", "setup_id", "flow_id", "value", "upload_time"]
 
 ARQ_LOG = None
@@ -60,8 +39,6 @@ def salvar_flows(flows, pasta_dados):
 
 
 def baixar_pagina(tid, offset):
-    """Baixa uma página de até LOTE runs. Devolve um DataFrame (vazio se acabou).
-    Se todas as tentativas falharem, levanta a última exceção."""
     ultimo_erro = None
     for espera in [0] + ESPERAS:
         if espera:
@@ -73,13 +50,12 @@ def baixar_pagina(tid, offset):
                 offset=offset, output_format="dataframe")
         except openml.exceptions.OpenMLServerNoResult:
             return pd.DataFrame()
-        except Exception as e:  # erro de rede, servidor ocupado etc.
+        except Exception as e:
             ultimo_erro = e
     raise ultimo_erro
 
 
 def baixar_task(tid, esperado, pasta_dados, flows):
-    """Baixa todos os runs de uma task. Devolve o total de runs (ou None se já estava completa)."""
     pasta = os.path.join(pasta_dados, "runs", f"task_{tid}")
     os.makedirs(pasta, exist_ok=True)
     marca = os.path.join(pasta, "COMPLETA")
@@ -89,14 +65,13 @@ def baixar_task(tid, esperado, pasta_dados, flows):
     paginas = sorted(f for f in os.listdir(pasta)
                      if f.startswith("pagina_") and f.endswith(".csv.gz"))
 
-    # Retomada: se a última página gravada é parcial, a task já tinha terminado.
     if paginas:
         ultima = pd.read_csv(os.path.join(pasta, paginas[-1]))
         if len(ultima) < LOTE:
             open(marca, "w").close()
             return (len(paginas) - 1) * LOTE + len(ultima)
 
-    total = len(paginas) * LOTE      # todas as páginas gravadas até aqui estão cheias
+    total = len(paginas) * LOTE
     offset = total
     if paginas:
         log(f"task {tid}: retomando do offset {offset} ({len(paginas)} páginas já gravadas)")
@@ -114,7 +89,6 @@ def baixar_task(tid, esperado, pasta_dados, flows):
             raise RuntimeError(f"colunas ausentes na resposta do OpenML: {faltando}. "
                                f"Colunas recebidas: {df.columns.tolist()}")
 
-        # atualiza o mapa flow_id -> flow_name (gravado a cada página, é pequeno)
         novos = False
         for fid, nome in df[["flow_id", "flow_name"]].drop_duplicates().itertuples(index=False):
             if int(fid) not in flows:
@@ -129,12 +103,12 @@ def baixar_task(tid, esperado, pasta_dados, flows):
         arq = os.path.join(pasta, f"pagina_{offset:07d}.csv.gz")
         tmp = arq + ".tmp"
         df[COLUNAS_RUNS].to_csv(tmp, index=False, compression="gzip")
-        os.replace(tmp, arq)             # gravação atômica: nunca fica página pela metade
+        os.replace(tmp, arq)
 
         total += len(df)
         offset += LOTE
 
-        if len(df) < LOTE:               # página parcial = última
+        if len(df) < LOTE:
             terminou = True
             break
 
@@ -174,7 +148,7 @@ def main():
         alvo = contagem[contagem.runs_aprox > args.limite_fase1]
     else:
         alvo = contagem
-    alvo = alvo.sort_values("runs_aprox")   # das menores para as maiores
+    alvo = alvo.sort_values("runs_aprox")
 
     flows = carregar_flows(args.dados)
     log(f"início: {len(alvo)} tasks na lista (fase {args.task or args.fase})")

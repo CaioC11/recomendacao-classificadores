@@ -315,8 +315,6 @@ Efeito da limpeza:
 - Decidir o tratamento dos NaN residuais do pymfe e a imputação definitiva (semana 2)
 - Rodar o pymfe nas 60 bases, a fração de faltantes como metacaracterística e a
   sensibilidade com kNN-imputer (semana 2)
-- Ajustar o plano de carga horária e prazos (60 bases, datas atuais; entrega à Juscimara
-  na quinta 12/nov, sexta 13/nov como folga)
 - Curva do máximo esperado em função de k (1, 3, 10, 30) por família, como medida de
   sensibilidade ao tuning (opcional)
 - Comparar o max_sub3 com a esperança exata do máximo de 3 runs (opcional)
