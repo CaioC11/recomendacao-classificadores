@@ -1,7 +1,7 @@
-# Decisões de desenho do experimento (versão definitiva)
+# Decisões de desenho do experimento (versão 1)
 
 Última atualização: 12/nov/2026. Cada decisão traz o motivo e os números que a sustentam.
-Itens marcados com **(a confirmar)** são hipóteses ou escolhas ainda em aberto.
+Há hipóteses ou escolhas ainda em aberto.
 ---
 
 ## 1. Métrica
