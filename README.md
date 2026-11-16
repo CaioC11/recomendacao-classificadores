@@ -1,70 +1,92 @@
-# Recomendação de Classificadores
+# Recomendação de Classificadores via Meta-Aprendizado (OpenML-CC18)
 
-Pipeline experimental de meta-aprendizado para recomendação de famílias de classificadores sobre a suíte **OpenML-CC18**, utilizando metacaracterísticas estruturais das bases (`pymfe`) e avaliação por *leave-one-dataset-out* (LODO).
+Experimento de meta-aprendizado para recomendação de famílias de algoritmos de classificação sobre a suíte **OpenML-CC18**, utilizando histórico público de execuções (*runs*) avaliadas por área sob a curva ROC (`area_under_roc_curve`) e metacaracterísticas extraídas com `pymfe`.
 
-**Autor:** Caio
-
----
-
-## Visão geral do experimento
-
-O experimento está dividido em duas etapas principais:
-
-1. **Preparação dos dados e construção das tabelas base × família (concluída):**
-   - **Bases:** 60 *tasks* da suíte OpenML-CC18 (31 binárias e 29 multiclasse), selecionadas entre 500 e 50.000 instâncias, até 500 atributos e avaliação uniforme via *10-fold cross-validation*.
-   - **Extração e limpeza:** 3.624.525 *runs* extraídos via API do OpenML (métrica `area_under_roc_curve`), reduzidos a **2.778.717 *runs*** após a remoção de preditores constantes degenerados concentrados próximos a $\text{AUC} = 0{,}5$.
-   - **Famílias e agregação:** agrupamento pela família do estimador final com corte de $\ge 3$ *runs* por célula e presença em $\ge 70\%$ das bases (**22 famílias** de `sklearn`, `weka` e `mlr`). O desempenho por célula é agregado pelo máximo esperado de $k = 3$ tentativas aleatórias (`max_sub3`, $R = 100$), controlando o viés de volume de *tuning*.
-   - **Matrizes de avaliação:** remoção prévia de 2 bases fracas ($\text{AUC}_{\max} < 0{,}70$), definindo o **núcleo sem faltantes (`45 × 17`)** como cenário principal e a tabela completa sem imputação (**`58 × 22`**) como análise de sensibilidade.
-
-2. **Metacaracterísticas e recomendador (em andamento):**
-   - Extração de metacaracterísticas (`general`, `statistical` e `info-theory`) via `pymfe` com codificação `one-hot-full`.
-   - Avaliação de recomendador baseado em $k$-NN sobre metacaracterísticas via validação *leave-one-dataset-out*.
-
-Toda a justificativa metodológica, testes de diagnóstico e análises de sensibilidade estão documentados em [`decisions.md`](decisions.md).
-
----
-
-## Estrutura do repositório
+## Estrutura do Repositório
 
 ```text
 recomendacao-classificadores/
-├── decisions.md                         #Registro definitivo das decisões e evidências numéricas
-├── requirements.txt                     #Dependências do ambiente Python
+├── README.md
+├── decisions.md                            #Registro completo das decisões
+├── requirements.txt                        #Dependências
+├── .gitignore
+├── src/
+│   └── extracao_runs.py                    #Script CLI
 ├── notebooks/
-│   ├── 01_preparacao_dados.ipynb        #Fase 1: seleção, limpeza, famílias, agregação e núcleo
-│   └── 02_pymfe_testes.ipynb            #Fase 2: testes de codificação e diagnóstico do pymfe
-└── src/
-    └── extracao_runs.py                 #Script CLI com retomada automática para download dos runs
+│   ├── 01_preparacao_dados.ipynb           #Seleção, limpeza v3, famílias, agregação max_sub3 e diagnósticos
+│   └── 02_pymfe_testes.ipynb               #Testes de estabilidade, codificação categórica e faltantes no pymfe
+└── data/
+    ├── cobertura_tasks.csv                 #Cobertura inicial de runs e flows nas 60 tasks selecionadas
+    ├── contagem_runs.csv                   #Estimativa de volume de runs por task usada na extração
+    ├── flows.csv                           #Catálogo dos 2.794 flows extraídos (flow_id e flow_name)
+    ├── familias.csv                        #Mapeamento das 657 famílias, cobertura e flag das 22 finais
+    └── tabelas/
+        ├── celulas_longa.parquet           #Tabela em formato longo das 1.114 células válidas (n >= 3)
+        ├── nucleo_sub3_sem_fracas.{csv,parquet}   #Matriz principal: 45 bases × 17 famílias (sem NaN, max_sub3)
+        ├── nucleo_sub3.{csv,parquet}              #Núcleo completo antes do corte de bases fracas (46 × 17)
+        ├── tab_sub3.{csv,parquet}                 #Matriz completa limpa em max_sub3 (60 × 22, 15,6% NaN)
+        ├── tab_sub3_sem_fracas.{csv,parquet}      #Sensibilidade sem imputação e sem bases fracas (58 × 22)
+        ├── tab_sub3_sem_limpeza.{csv,parquet}     #Sensibilidade em max_sub3 calculada sobre os runs brutos (60 × 22)
+        ├── tab_max.{csv,parquet}                  #Sensibilidade agregada pelo máximo completo da célula (60 × 22)
+        ├── tab_med.{csv,parquet}                  #Sensibilidade agregada pela mediana da célula (60 × 22)
+        └── tab_n.{csv,parquet}                    #Contagem de runs válidos por célula (60 × 22)
 ```
 
-> **Nota sobre os dados:** Os arquivos brutos e intermediários (`data/runs/`, arquivos `.parquet` e tabelas `.csv`) não são versionados no Git (`.gitignore`) devido ao volume (~3,6 milhões de registros), mas podem ser integralmente reproduzidos a partir do script e dos notebooks acima.
+> **Arquivos locais ignorados no Git (`.gitignore`):** os 3.655 arquivos brutos compactados em `data/runs/task_<id>/pagina_*.csv.gz`, os `.parquet` intermediários consolidados em `data/` (`runs_consolidado.parquet`, `runs_limpos*.parquet`, `runs_v3_familia*.parquet`) e `data/extracao.log` não são versionados devido ao tamanho.
 
----
+## Tabelas Base × Família (`data/tabelas/`)
 
-## Como reproduzir
+| Arquivo | Dimensão | Descrição | Uso no experimento |
+| :--- | :---: | :--- | :--- |
+| `nucleo_sub3_sem_fracas` | 45 × 17 | `max_sub3` (runs limpos), sem células faltantes e sem bases fracas (`AUC_max < 0,70`) | **Tabela principal** de avaliação do recomendador |
+| `tab_sub3_sem_fracas` | 58 × 22 | `max_sub3` (runs limpos) para todas as 22 famílias, excluindo as bases `3560` e `125920` | Sensibilidade de cobertura sem imputação |
+| `tab_sub3` | 60 × 22 | `max_sub3` (runs limpos) nas 60 bases e 22 famílias (1.114 células observadas; 206 `NaN`) | Sensibilidade incluindo bases fracas |
+| `nucleo_sub3` | 46 × 17 | Submatriz sem `NaN` antes da remoção da base fraca `3560` | Referência intermediária do núcleo |
+| `tab_sub3_sem_limpeza` | 60 × 22 | `max_sub3` exato calculado sobre os *runs* brutos (sem a limpeza `v3`) | Sensibilidade ao efeito da limpeza |
+| `tab_max` | 60 × 22 | Máximo observado de AUC por célula (runs limpos) | Sensibilidade de agregação (viés de volume/tuning) |
+| `tab_med` | 60 × 22 | Mediana observada de AUC por célula (runs limpos) | Sensibilidade de agregação (desempenho típico) |
+| `tab_n` | 60 × 22 | Número de *runs* válidos em cada célula (`n >= 3`) | Diagnóstico de volume amostral |
 
-### 1. Configuração do ambiente
+Todas as 8 matrizes estão disponíveis em `.parquet` e `.csv` (indexadas por `task_id`).
+
+## Como Reproduzir
+
+### 1. Ambiente
+
+Crie e ative um ambiente virtual Python (testado em Python 3.14) e instale as dependências:
 
 ```bash
 python -m venv .venv
-# Windows (PowerShell):
-.\.venv\Scripts\Activate.ps1
-# Linux/macOS:
-# source .venv/bin/activate
+#Linux/macOS: source .venv/bin/activate
+#Windows (PowerShell): .\.venv\Scripts\Activate.ps1
 
 pip install -r requirements.txt
 ```
 
-### 2. Extração dos runs do OpenML (opcional)
+### 2. Extração dos runs brutos (opcional — tabelas já versionadas)
 
-Caso não possua a pasta `data/runs/` localmente, execute o extrator a partir da raiz do repositório (o script suporta interrupção e retomada automática):
+Para baixar localmente todas as páginas de avaliações (`area_under_roc_curve`) das 60 *tasks* em `data/runs/`:
 
 ```bash
-python src/extracao_runs.py --fase 1     # Tasks com até 70.000 runs
-python src/extracao_runs.py --fase 2     # Tasks maiores
+python src/extracao_runs.py --fase 1       # 42 tasks menores (<= 70.000 runs)
+python src/extracao_runs.py --fase 2       # 18 tasks maiores (> 70.000 runs)
+#Ou em execução única:
+python src/extracao_runs.py --fase todas --dados data
 ```
 
-### 3. Execução dos notebooks
+Opções disponíveis via `python src/extracao_runs.py --help`:
+- `--fase {1,2,todas}`: etapa de extração (`1`, `2` ou `todas`; padrão: `1`).
+- `--task TASK`: baixa apenas uma *task* específica para teste.
+- `--dados DADOS`: diretório base de dados (padrão: `data`).
+- `--limite-fase1 LIMITE_FASE1`: corte de volume de *runs* entre as fases 1 e 2 (padrão: `70000`).
 
-1. **`notebooks/01_preparacao_dados.ipynb`:** consolida os *runs*, aplica a limpeza `v3`, agrupa as 22 famílias, calcula `max_sub3` e gera as matrizes finais em `data/tabelas/` (`nucleo_sub3_sem_fracas.parquet`, `tab_sub3_sem_fracas.parquet`, `tab_max.parquet`, `tab_med.parquet` e `tab_sub3_sem_limpeza.parquet`). *(As células iniciais de consulta à API na Seção 1 podem ser puladas caso `cobertura_tasks.csv` e `contagem_runs.csv` já estejam em `data/`.)*
-2. **`notebooks/02_pymfe_testes.ipynb`:** executa os testes preliminares de extração e estabilidade das metacaracterísticas com `pymfe`.
+### 3. Preparação das matrizes e diagnósticos
+
+- **`notebooks/01_preparacao_dados.ipynb`**:
+  - Com `data/runs/` presente localmente, execute a partir da **Seção 2 (`Integridade e limpeza`)** até o fim para regenerar todos os `.parquet` intermediários e as tabelas em `data/tabelas/` sem refazer as consultas de paginação da API na Seção 1.
+- **`notebooks/02_pymfe_testes.ipynb`**:
+  - Pode ser executado diretamente (*Restart & Run All*) para reproduzir os testes de invariância categórica (`one-hot-full`), determinismo (`attr_conc`) e imputação de faltantes com `pymfe`.
+
+## Documentação Metodológica
+
+Todas as justificativas quantitativas, verificações de integridade, análises de sensibilidade e limitações registradas antes da modelagem estão detalhadas em [`decisions.md`](decisions.md).
