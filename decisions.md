@@ -245,7 +245,7 @@ das famílias dentro de cada base e a correlação é de Spearman, uma por base,
 - `tab_sub3` (60 × 22), `tab_max` (sensibilidade), `tab_med` (mediana) e `tab_n` (nº de
   runs por célula), em parquet e csv; `celulas_longa.parquet`
 - 206 células faltantes de 1.320 (15,6%), as de n < 3
-- `tab_sub3_sem_limpeza` (60 × 22, em parquet): `max_sub3` calculado com `emax_exact`
+- `tab_sub3_sem_limpeza` (60 × 22, em parquet e csv): `max_sub3` calculado com `emax_exact`
   sobre os runs sem limpeza (brutos), diretamente comparável à `tab_sub3` sem diferença de
   sorteio ou semente
 - Todas as tabelas usam os runs limpos (v3), exceto `tab_sub3_sem_limpeza`. A comparação
