@@ -39,14 +39,10 @@ Itens marcados com **(a confirmar)** são hipóteses ou escolhas ainda em aberto
 - Procedimento de avaliação: único (10-fold, confirmado)
 - Resultado dos filtros de tamanho: 72 -> 60 tasks (6 com mais de 50.000 instâncias,
   10 com mais de 500 features, 0 com menos de 500 instâncias)
-- **As 60 tasks foram mantidas**: a meta inicial de 20 a 40 tasks foi abandonada e a
-  regra de >= 30 flows não foi usada como corte. A cobertura passou a ser controlada
-  pela presença das famílias (seção 8)
 
 ## 4. Flows, bibliotecas e famílias
 - Bibliotecas: sklearn e weka, com implementações mantidas separadas; o mlr (flows do R)
-  entrou como bloco próprio, com prefixo `mlr:` (a decisão original só previa sklearn e
-  weka). Os flows `automlbenchmark_*` ficaram fora por serem AutoML. Flows sem prefixo
+  entrou como bloco próprio, com prefixo `mlr:`. Os flows `automlbenchmark_*` ficaram fora por serem AutoML. Flows sem prefixo
   de biblioteca no nome (12 flows, 133 runs, 20 tasks; ex.: smo, j48, iBK, A1DE,
   hyperpipes) entram como weka pelo nome do algoritmo; a origem não pôde ser confirmada
   nos metadados (os genéricos naivebayes, multilayerperceptron e randomforest trazem a
@@ -68,7 +64,7 @@ Itens marcados com **(a confirmar)** são hipóteses ou escolhas ainda em aberto
 
 ## 5. Agregação
 - Nível: um valor por (task, família de classificador)
-- **Regra principal atual: máximo esperado de k = 3 runs sorteados por célula (`max_sub3`)**,
+- **Regra principal atual: máximo esperado de k = 3 runs sem reposição por célula (`max_sub3`)**,
   que controla o viés do número de runs (seção 9)
 - Sensibilidade: máximo completo (`tab_max`) e mediana (`tab_med`)
 - Mínimo de 3 runs por célula; abaixo disso, valor faltante (calibrado, seção 8)
@@ -134,14 +130,13 @@ Validação da regra (nas 22 famílias finais):
   classificador final ou o base de um wrapper, e 1 sklearn DummyClassifier), 667 runs nas
   60 tasks. A limpeza removeu 99,1% (661); a AUC mediana desses flows fica entre 0,4957 e 0,5000 
   (exceto o flow 7050, com 0,9116), coerente com predição constante.
-- Sobraram 6 runs (flows 56, 589, 1190, 7849, 7050 e 43339). O 7050 (`weka.LWL_ZeroR(1)`, AUC
-  0,9116) mapeia para `weka:lwl` (que integra as 22 famílias finais), mas não é um preditor
-  constante: ZeroR atua apenas como aprendiz base do LWL. Dos outros cinco runs, quatro
-  (task 11, dois runs; task 31 e task 14954; AUC de 0,494 a 0,497) são predições constantes
-  isoladas que a regra por valor não captura por exigir repetição, e o quinto (`weka.ZeroR(1)`
-  na task 3021, AUC 0,962) é um caso anômalo não explicado; nenhum desses cinco pertence às
-  22 famílias finais (`weka:grading`, `weka:zeror` e `sklearn:DummyClassifier` ficam abaixo
-  do corte de 70%), portanto não afetam as tabelas
+- Sobraram 6 runs (flows 56, 589, 1190, 7849, 7050 e 43339). O 7050 (weka.LWL_ZeroR, AUC
+  0,91) não é constante: ZeroR é só o base do LWL. Quatro dos outros cinco (task 11, dois
+  runs, task 31 e task 14954; AUC de 0,494 a 0,497) parecem predições constantes isoladas
+  que a regra por valor não pega, porque ela exige repetição; o quinto, um weka.ZeroR(1)
+  na task 3021 com AUC 0,962, é anômalo e não foi explicado. Nenhum pertence às 22
+  famílias finais (weka:grading, weka:zeror e sklearn:DummyClassifier ficam abaixo do
+  corte de 70%), então não afetam as tabelas
 - Esses 661 runs são menos de 0,1% dos 845.808 removidos pela regra por valor: a
   identificação por nome de flow não substitui a regra por valor. Ela também erra nos dois
   sentidos (falso positivo no LWL_ZeroR; os picos do mlr não aparecem por nome)
@@ -149,12 +144,11 @@ Validação da regra (nas 22 famílias finais):
 Efeito da limpeza (comparação com e sem limpeza; em todos os casos, "ranking" é a ordem
 das famílias dentro de cada base e a correlação é de Spearman, uma por base, nas 60 bases):
 - **No max_sub3: relevante**: limpo e bruto calculados com a esperança exata do máximo de
-  3 runs (`emax_exact`, sem sorteio). 168 das 1.114 células (15,1%) mudam mais que o
+  3 runs (`emax_exact`). 168 das 1.114 células (15,1%) mudam mais que o
   limiar de materialidade fixo LIM = 0,005, quase sempre com limpo >= bruto (máx. 0,298).
   Por biblioteca: mlr 21 de 90, sklearn 135 de 514, weka 12 de 510. Correlação entre os rankings 
   com e sem limpeza: mediana 0,977 (mín. 0,59, base 125920)
-- **Na mediana (`tab_med`)**: a mediana não tem ruído de sorteio, então qualquer diferença
-  é real. Diferença limpo menos bruto nas 1.114 células: média 0,020, máximo 0,49 (maior
+- **Na mediana (`tab_med`)**: diferença limpo menos bruto nas 1.114 células: média 0,020, máximo 0,49 (maior
   que o do max_sub3, 0,298). Correlação entre os rankings com e sem limpeza: mediana 0,971
   (mín. 0,64, base 10101)
 - **No máximo completo (`tab_max`): praticamente nulo**: 1 célula em 1.114
@@ -258,8 +252,7 @@ das famílias dentro de cada base e a correlação é de Spearman, uma por base,
   do recomendador com e sem limpeza é feita só no max_sub3; o máximo completo e a mediana
   entram sempre limpos (a mediana bruta mede a degeneração, não a família, como na
   task 28: 0,9905 limpa contra 0,49998 bruta)
-- `nucleo_sub3`, `tab_sub3_sem_fracas` e `nucleo_sub3_sem_fracas`, também exportadas em
-  parquet e csv (seções 11 e 12)
+- `nucleo_sub3`, `tab_sub3_sem_fracas` e `nucleo_sub3_sem_fracas` (seções 11 e 12)
 - Evidência: 01_preparacao_dados.ipynb, Seção 4, Seção 5 e Seção 6.
 
 ## 11. Células faltantes
@@ -409,10 +402,10 @@ das famílias dentro de cada base e a correlação é de Spearman, uma por base,
 - **Métricas de avaliação (Seção 13):** avaliar o recomendador no núcleo principal
   (`45 × 17`) usando arrependimento em AUC e acerto no top-1/top-3 como métricas
   principais, e correlação de Spearman como métrica secundária.
-- **Comparação binária vs. multiclasse (feedback profa. Juscimara):** estratificar a
+- **Comparação binária vs. multiclasse:** estratificar a
   avaliação do recomendador entre bases binárias (31) e multiclasse (29) para verificar
   diferenças de comportamento ou escala entre os dois cenários.
-- **Sensibilidade com acurácia (feedback profa. Juscimara, fase 2):** extrair a tabela de
+- **Sensibilidade com acurácia:** extrair a tabela de
   desempenho com `predictive_accuracy` para as 60 tasks e rodar o recomendador como
   sensibilidade, depois do resultado principal com a AUC.
   - Extração: parametrizar `FUNCAO` em `src/extracao_runs.py` (`--funcao`); avaliar
