@@ -127,11 +127,20 @@ def baixar_task(tid, esperado, pasta_dados, flows):
 def main():
     global ARQ_LOG
     ap = argparse.ArgumentParser(description="Extração de runs do OpenML (AUC)")
-    ap.add_argument("--fase", choices=["1", "2", "todas"], default="1")
+    ap.add_argument(
+        "--fase",
+        choices=["1", "2", "todas"],
+        default="1",
+        help="etapa de extração: 1 (tasks menores), 2 (tasks maiores) ou todas (padrão: 1)",
+    )
     ap.add_argument("--task", type=int, help="baixa só esta task (teste)")
-    ap.add_argument("--dados", default="data", help="pasta de dados (padrão: dados)")
-    ap.add_argument("--limite-fase1", type=int, default=70_000,
-                    help="a fase 1 pega tasks com até este nº de runs (padrão: 70000)")
+    ap.add_argument("--dados", default="data", help="pasta de dados (padrão: data)")
+    ap.add_argument(
+        "--limite-fase1",
+        type=int,
+        default=70_000,
+        help="a fase 1 pega tasks com até este nº de runs (padrão: 70000)",
+    )
     args = ap.parse_args()
 
     os.makedirs(os.path.join(args.dados, "runs"), exist_ok=True)

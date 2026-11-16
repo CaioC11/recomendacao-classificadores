@@ -219,5 +219,11 @@ __marimo__/
 # Streamlit
 .streamlit/secrets.toml
 
-#data
-data/
+
+#Dados brutos, intermediários pesados e backups locais
+data/*
+!data/cobertura_tasks.csv
+!data/contagem_runs.csv
+!data/familias.csv
+!data/flows.csv
+!data/tabelas/

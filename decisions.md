@@ -1,32 +1,36 @@
 # Decisões de desenho do experimento (versão definitiva)
 
 Última atualização: 12/nov/2026. Cada decisão traz o motivo e os números que a sustentam.
-Itens marcados com **(a confirmar)** são hipóteses ou escolhas ainda em aberto. A seção 16
-lista o que mudou em relação à versão anterior.
-
+Itens marcados com **(a confirmar)** são hipóteses ou escolhas ainda em aberto.
 ---
 
 ## 1. Métrica
 - Escolhida: area_under_roc_curve (AUC), em todas as bases, inclusive multiclasse
-- Uma métrica fixa de desempenho (pedido da Juscimara); descartado usar duas métricas
-  (principal + secundária) para o desempenho dos classificadores
+- Métrica principal fixa: AUC.
+- Sensibilidade: acurácia (`predictive_accuracy`), só para verificar se o resultado do
+  recomendador se mantém; não substitui a AUC nem entra no resultado principal.
+- O ranking das famílias dentro de cada base não depende de a AUC ser binária ou
+  multiclasse. A escala só pesa nos usos de valor absoluto: o limiar de 0,70 das bases
+  fracas e o arrependimento médio em AUC entre bases. Por isso os resultados também
+  serão estratificados entre binárias e multiclasse (seção 15).
 - Cobertura: em 3 tasks (3, 6 e 11), AUC e acurácia têm a mesma cobertura de runs e flows
-- Verificação do cálculo (task 11, 3 classes, 1 run): o valor do OpenML (0.936468)
-  coincide com a AUC média ponderada pela frequência das classes, calculada sobre as
-  predições agrupadas (0.936468). A média simples entre classes deu 0.842 e a
-  ponderada por fold deu 0.9370
-- Limitações: verificado em um único run; a ponderação por frequência de classe herda
-  parte da sensibilidade ao desbalanceamento
+- Verificação do cálculo (task 11, 3 classes, 5 runs): o valor do OpenML coincide com a AUC
+  one-vs-rest ponderada pela frequência das classes, calculada sobre as predições
+  agrupadas (maior diferença: 4,6e-7). A média simples entre classes fica abaixo em todos os
+  runs (de 0,001 a 0,16)
+- Limitações: verificado numa única task (3 classes), em 5 runs; a ponderação por frequência
+  de classe possui parte da sensibilidade ao desbalanceamento
 - Runs com AUC exatamente 0,5 (predição constante): verificado, ver seção 7
   (média de 5,34% dos runs por task, máximo 31,56%)
-- Evidência: 01_selecao_bases.ipynb, Seção 2 (exec 21 e 23, proporção de AUC == 0,5). A verificação multiclasse da task 11 foi feita em teste avulso fora deste notebook.
+- Evidência: 01_preparacao_dados.ipynb, Seção 2 (proporção de AUC == 0,5). 
+- Evidência: 01_preparacao_dados.ipynb, Seção 6 (verificação da AUC multiclasse)
 - Composição das 60 tasks: 31 binárias e 29 multiclasse (de 3 a 26 classes); os resultados do recomendador serão reportados também estratificados entre binárias e multiclasse.
 
 ## 2. Fonte das bases
 - Suíte OpenML-CC18 (72 tasks de classificação curadas)
 - Justificativa: suíte padrão da literatura, procedimento de avaliação uniforme
   (as 72 tasks usam 10-fold cross-validation)
-- Evidência: 01_selecao_bases.ipynb, Seção 1 (exec 1–6).
+- Evidência: 01_preparacao_dados.ipynb, Seção 1.
 
 ## 3. Filtros de seleção
 - Instâncias: 500 a 50.000 (custo do pymfe na semana 2)
@@ -35,9 +39,6 @@ lista o que mudou em relação à versão anterior.
 - Procedimento de avaliação: único (10-fold, confirmado)
 - Resultado dos filtros de tamanho: 72 -> 60 tasks (6 com mais de 50.000 instâncias,
   10 com mais de 500 features, 0 com menos de 500 instâncias)
-- Cobertura de flows (amostra de até 1000 runs por task): mínimo 13, mediana 107,5,
-  máximo 193; 58 tasks com pelo menos 30 flows; abaixo de 30: texture (125922, 13 flows)
-  e dresses-sales (125920, 14 flows); car (146821) tem exatamente 30
 - **As 60 tasks foram mantidas**: a meta inicial de 20 a 40 tasks foi abandonada e a
   regra de >= 30 flows não foi usada como corte. A cobertura passou a ser controlada
   pela presença das famílias (seção 8)
@@ -45,44 +46,57 @@ lista o que mudou em relação à versão anterior.
 ## 4. Flows, bibliotecas e famílias
 - Bibliotecas: sklearn e weka, com implementações mantidas separadas; o mlr (flows do R)
   entrou como bloco próprio, com prefixo `mlr:` (a decisão original só previa sklearn e
-  weka). Os flows `automlbenchmark_*` ficaram fora por serem AutoML
-- Unidade de classificador: família do classificador final
-  - sklearn: estimador final do Pipeline e estimador interno nos SearchCV
-  - weka: família mais externa nos wrappers (ex.: Bagging, AdaBoostM1)
+  weka). Os flows `automlbenchmark_*` ficaram fora por serem AutoML. Flows sem prefixo
+  de biblioteca no nome (12 flows, 133 runs, 20 tasks; ex.: smo, j48, iBK, A1DE,
+  hyperpipes) entram como weka pelo nome do algoritmo; a origem não pôde ser confirmada
+  nos metadados (os genéricos naivebayes, multilayerperceptron e randomforest trazem a
+  dependência "pocopnml"). 40 desses runs chegam às tabelas finais, 1 por célula (em 40
+  células, no máximo 17% dos runs da célula), então o efeito esperado é desprezível
+- Unidade de classificador: família do algoritmo de aprendizado, sem os envelopes de busca
+  de hiperparâmetros e de pré-processamento
+  - sklearn: estimador final do Pipeline; nos SearchCV (Grid, Randomized e Halving), o
+    estimador interno
+  - weka: família mais externa, exceto FilteredClassifier, MultiSearch e MultiScheme, que
+    são descartados para ficar com o classificador interno (Bagging, AdaBoostM1 e
+    AttributeSelectedClassifier permanecem como família). O CVParameterSelection
+    (também de busca de hiperparâmetros) não é descartado, mas não entra nas 22
+    famílias finais
   - mlr: sufixos .preproc / .imputed / .tuned / .dummied normalizados
   - removido o sufixo de versão, ex.: "(33)"
 - Baixar o bruto sem filtrar; o agrupamento acontece depois
-- Risco: nomes de módulos sklearn antigos sugerem runs de versões antigas da biblioteca
-- Famílias meta (bagging, adaboostm1, attributeselectedclassifier) agrupam estimadores
-  internos variados; a família é "o estimador externo"
-- Evidência: 01_selecao_bases.ipynb, Seção 3 (exec 35–42 e 52).
+- Evidência: 01_preparacao_dados.ipynb, Seção 3.
 
-## 5. Agregação (revisada em 06/nov/2026)
+## 5. Agregação
 - Nível: um valor por (task, família de classificador)
-- **Regra principal atual: máximo por célula, com controle do viés do número de runs**
-  (seção 9). A decisão original (30/out) era a mediana, com o máximo como sensibilidade;
-  Caio passou a preferir o máximo
-- Sensibilidade: mediana e média dos 5 melhores
+- **Regra principal atual: máximo esperado de k = 3 runs sorteados por célula (`max_sub3`)**,
+  que controla o viés do número de runs (seção 9)
+- Sensibilidade: máximo completo (`tab_max`) e mediana (`tab_med`)
 - Mínimo de 3 runs por célula; abaixo disso, valor faltante (calibrado, seção 8)
 - Motivo: poucos flows concentram muitos runs (350 runs de um único pipeline na task 3)
-- Limitações: o máximo cresce com o número de runs (viés de volume) e a mediana depende
-  de quais configurações foram submetidas
-- Evidência: 01_selecao_bases.ipynb, Seção 4 (exec 53–56).
+- Evidência: 01_preparacao_dados.ipynb, Seção 4.
 
 ---
 
 ## 6. Extração dos runs
+- Só a métrica `area_under_roc_curve` foi extraída (constante `FUNCAO` em
+  `src/extracao_runs.py`)
 - `list_evaluations` do OpenML dá erro com size acima de 1000, então a página é de 1000
-- A listagem padrão não é monotônica em run_id nem em valor; `sort_order` ordena pelo
+- A ordem da listagem padrão não segue run_id nem valor, e o `sort_order` ordena só pelo
   valor da AUC. Por isso foram baixados **todos** os runs das 60 tasks, em duas fases
-  (tasks pequenas primeiro, grandes depois), com script em segundo plano e retomada
-- Fase 1: 42 tasks, 777.822 runs, 97 minutos, 0 falhas. Fase 2: 18 tasks grandes
-- Total: **3.624.525 runs**, 0 duplicados, 0 nulos, 0 valores fora de [0,1]
-- Por task: mediana de ~21.000 runs, mínimo ~4.000, máximo ~415.000 (task 31)
-- Exemplo: task 3 tem 173.304 runs e 927 flows distintos (~15 min para baixar)
+  (tasks com até 70.000 runs primeiro, as maiores depois), com script em segundo plano e
+  retomada
+- Fase 1: 42 tasks, 777.822 runs. Fase 2: 18 tasks grandes,
+  2.846.703 runs
+- Total: **3.624.525 runs**, 0 duplicados (por task e entre tasks), 0 nulos, 0 valores
+  fora de [0,1]. Em todas as 60 tasks o total baixado supera a contagem aproximada da API
+  em 1 a 1.000 runs (a contagem arredonda para milhares)
+- Por task: mediana de ~21.500 runs, mínimo 4.957, máximo 415.117 (task 31)
+- Exemplo: task 3 tem 173.304 runs e 927 flows distintos (mais de 17 minutos para baixar)
 - Dados em `data/runs/task_<id>/` (páginas csv.gz e arquivo COMPLETA). As colunas são
   run_id, setup_id, flow_id, value e upload_time; o nome do flow vem de `flows.csv`
-- Evidência: 01_selecao_bases.ipynb, Seção 1 (exec 7–16) e Seção 2 (exec 17–22).
+- Evidência: 01_preparacao_dados.ipynb, Seção 1 e Seção 2.
+
+---
 
 ## 7. Limpeza dos runs (v3)
 Problema: valores constantes perto de 0,5 repetidos em centenas ou milhares de runs
@@ -97,36 +111,78 @@ Passos:
    tasks, 823.307 runs. União com o passo 1: 3.624.525 -> 2.800.528 (v2)
 3. Segunda passada com 3 casas: 55 pares extras detectados em 22 tasks (24.792 runs). A task 3560 (mediana 0,547; 2.981 runs) ficou de fora por ser ambígua, resultando em 21.811 runs efetivamente removidos. v3 = v2 menos esses extras: 2.778.717 runs (845.808 removidos no total, 23,3%); menor n por task = 4.679
 - Resíduo explicado: task 3022 (vowel, 11 classes) mantém 8,96% (1.498 runs) com AUC < 0,5 espalhados em flows do sklearn (BernoulliNB, GradientBoosting, DecisionTree, SVC), confirmando que a regra preserva classificadores genuinamente ruins sem pico constante.
-- Mecanismo dos picos < 0,5: verificado na task 3903 que a AUC teórica de um preditor constante usando a prior de treino por fold (com predições agrupadas) é 0,499252, coincidindo com o valor modal observado em 47.315 runs (0,4993).
+- Mecanismo dos picos < 0,5: verificado na task 3903 que a AUC teórica de um preditor constante usando a prior de treino por fold (com predições agrupadas) é 0,499252, coincidindo com o valor modal observado em 47.315 runs (0,4993); a inspeção direta das predições (ARFF) de 5 runs removidos nessa task confirmou uma única probabilidade e uma única classe predita por fold.
 - Arquivos: `runs_consolidado.parquet` (sem limpeza), `runs_limpos_v3.parquet`
 
 Validação da regra (nas 22 famílias finais):
 - 501.597 runs removidos, com valores entre 0,485 e 0,527 (média 0,497); nenhum acima
   de 0,53; 2.364 (0,47%) acima de 0,51 e 542 (0,11%) acima de 0,52
 - Os 542 acima de 0,52 se concentram em 10 células das bases 125920, 3560 e 219 (97%).
-  Nas duas primeiras, que são fracas, a janela da regra se sobrepõe ao desempenho
+  Nas duas primeiras, que são fracas, a janela da regra pode se sobrepor ao desempenho
   genuíno
+- Base 219 (flows removidos acima de 0,52 e efeito no max_sub3): dos 80 runs removidos
+  acima de 0,52, 72 são do RandomForest do sklearn; esse efeito é nulo (dif = +0,0002,
+  2,1% dos runs da célula removidos; weka:randomforest sem mudança). O efeito da limpeza
+  na 219 vem de outras famílias: sklearn:GradientBoosting (limpo 0,869 contra bruto
+  0,744, 55% removidos), mlr:rpart (0,737 contra 0,690, 57%) e sklearn:DecisionTree
+  (0,935 contra 0,918, 20%). Os runs removidos dessas três famílias estão todos em
+  valores únicos ou quase únicos em torno de 0,5: GradientBoosting, 1.270 runs em 0,5000
+  (635), 0,4999 (420) ou 0,5001 (215); mlr:rpart, 7.515 runs, todos em 0,4999;
+  DecisionTree, 418 runs, todos em 0,4999. São predições constantes. Portanto, na 219 a
+  limpeza remove predições constantes e não desempenho real
+- Checagem por nome de flow (dummy|zeror): 28 flows (27 do weka, em que ZeroR é o
+  classificador final ou o base de um wrapper, e 1 sklearn DummyClassifier), 667 runs nas
+  60 tasks. A limpeza removeu 99,1% (661); a AUC mediana desses flows fica entre 0,4957 e 0,5000 
+  (exceto o flow 7050, com 0,9116), coerente com predição constante.
+- Sobraram 6 runs (flows 56, 589, 1190, 7849, 7050 e 43339). O 7050 (`weka.LWL_ZeroR(1)`, AUC
+  0,9116) mapeia para `weka:lwl` (que integra as 22 famílias finais), mas não é um preditor
+  constante: ZeroR atua apenas como aprendiz base do LWL. Dos outros cinco runs, quatro
+  (task 11, dois runs; task 31 e task 14954; AUC de 0,494 a 0,497) são predições constantes
+  isoladas que a regra por valor não captura por exigir repetição, e o quinto (`weka.ZeroR(1)`
+  na task 3021, AUC 0,962) é um caso anômalo não explicado; nenhum desses cinco pertence às
+  22 famílias finais (`weka:grading`, `weka:zeror` e `sklearn:DummyClassifier` ficam abaixo
+  do corte de 70%), portanto não afetam as tabelas
+- Esses 661 runs são menos de 0,1% dos 845.808 removidos pela regra por valor: a
+  identificação por nome de flow não substitui a regra por valor. Ela também erra nos dois
+  sentidos (falso positivo no LWL_ZeroR; os picos do mlr não aparecem por nome)
 
-Efeito da limpeza:
-- **No máximo completo: praticamente nulo**: 1 célula em 1.114 (weka:randomforest,
-  base 3560, 0,5186 contra 0,5202); correlação de ranking por base = 1,0 nas 60 bases
-- **No max_sub3: relevante**: 173 das 1.114 células (15,5%) mudam acima do ruído
-  (p95 = 0,0048, medido com R = 200, ver seção 9), quase sempre com limpo >= bruto
-  (máx. 0,31). Por biblioteca: mlr 22 de 90, sklearn 135 de 514, weka 16 de 510.
-  Correlação de ranking por base: mediana 0,976 (mín. 0,69, base 125920). Na mediana
-  por célula: 0,971 (mín. 0,64)
-- Mecanismo: a diferença cresce com a fração de runs removida da célula (Spearman
-  0,76). 747 das 1.114 células não perdem runs e não mudam; nas 31 com mais de 60%
-  removidos a diferença média é 0,157 (máx. 0,31). As maiores diferenças são em
-  mlr:rpart (8 das 10 maiores) e sklearn:GradientBoostingClassifier
+Efeito da limpeza (comparação com e sem limpeza; em todos os casos, "ranking" é a ordem
+das famílias dentro de cada base e a correlação é de Spearman, uma por base, nas 60 bases):
+- **No max_sub3: relevante**: limpo e bruto calculados com a esperança exata do máximo de
+  3 runs (`emax_exact`, sem sorteio). 168 das 1.114 células (15,1%) mudam mais que o
+  limiar de materialidade fixo LIM = 0,005, quase sempre com limpo >= bruto (máx. 0,298).
+  Por biblioteca: mlr 21 de 90, sklearn 135 de 514, weka 12 de 510. Correlação entre os rankings 
+  com e sem limpeza: mediana 0,977 (mín. 0,59, base 125920)
+- **Na mediana (`tab_med`)**: a mediana não tem ruído de sorteio, então qualquer diferença
+  é real. Diferença limpo menos bruto nas 1.114 células: média 0,020, máximo 0,49 (maior
+  que o do max_sub3, 0,298). Correlação entre os rankings com e sem limpeza: mediana 0,971
+  (mín. 0,64, base 10101)
+- **No máximo completo (`tab_max`): praticamente nulo**: 1 célula em 1.114
+  (weka:randomforest, base 3560, 0,5186 contra 0,5202); correlação entre os rankings com e
+  sem limpeza = 1,0 nas 60 bases. Os runs degenerados raramente são o melhor run de uma
+  célula; o que a limpeza muda é o que a esperança de 3 runs ou a mediana encontram
+- **Mecanismo (vale para as três agregações)**: a diferença cresce com a fração de runs
+  removida da célula. 747 das 1.114 células não perdem runs e não mudam, então no máximo
+  367 (33%) podem mudar. No max_sub3, a diferença tem Spearman 0,99 com a fração removida;
+  nas 31 células com mais de 60% removidos a diferença média é 0,158 (máx. 0,298), sobretudo em mlr:rpart (7 das 10 maiores)
+  e sklearn:GradientBoostingClassifier. Na mediana, quando
+  mais da metade dos runs da célula é removida, a mediana bruta cai na janela da regra
+  (valor constante) e a limpa recupera o valor real: na célula de maior diferença (task 28,
+  sklearn:GradientBoosting, 61,2% removidos) ela vai de 0,49998 a 0,9905
+- **Leitura conjunta**: o máximo completo mede o melhor run submetido e quase não depende
+  da limpeza; max_sub3 e mediana medem o desempenho de runs típicos e dependem dela. Por
+  isso a diferença entre `tab_max` e `tab_sub3` mistura dois efeitos (o viés de volume e
+  tuning, e os runs degenerados), e a limpeza é o que deixa a comparação interpretável
 - Decisão: limpeza mantida e tratada como parte do método. O max_sub3 limpo mede o
-  máximo esperado de 3 runs **funcionais**. Sensibilidade: `tab_sub3_sem_limpeza`
-- Evidência: 01_selecao_bases.ipynb, Seção 2 (exec 21–33) e Seção 6 (exec 74–78).
+  máximo esperado de 3 runs **não degenerados**. Sensibilidades: `tab_sub3_sem_limpeza`,
+  `tab_med` e `tab_max`
+- Evidência: 01_preparacao_dados.ipynb, Seção 2 e Seção 6.
 
 ## 8. Famílias, mínimo de runs por célula e corte de cobertura
 - 657 famílias distintas antes do corte. Removidos 2.377 runs sem família (0,09%):
-  AutoML e wrappers (openmlpimp, arbok/TPOT, pipelineopt, keras, bsplitz) e flows
-  `classif.*` antigos sem prefixo. Sobram **2.776.340 runs** (`runs_v3_familia.parquet`)
+  2.351 de bibliotecas fora de sklearn, weka e mlr (1.811 de flows `classif.*` antigos
+  sem prefixo; o resto, AutoML e wrappers como openmlpimp, arbok/TPOT, pipelineopt, keras
+  e bsplitz) e 26 dos flows `automlbenchmark_*`. Sobram **2.776.340 runs** (`runs_v3_familia.parquet`)
 - Distribuição de runs por célula: mediana 1 no weka e 2 no mlr e no sklearn; p90 de 15
   no weka e acima de 1.300 no mlr e no sklearn
 - O mínimo de runs por célula e o corte de cobertura foram calibrados juntos.
@@ -145,69 +201,66 @@ Efeito da limpeza:
 - Motivo: com min 1 a comparação mede o orçamento de tuning, não a família (o weka
   entra com ~1 run por célula e o mlr e o sklearn com centenas); o min 3 preserva todos
   os tipos clássicos (árvores, ensembles, linear, SVM, Bayes, vizinhos, redes)
-- Sensibilidades: min 1 (90 famílias), min 5 (15 famílias, sem Naive Bayes) e corte de
+- Alternativas avaliadas na calibração: min 1 (90 famílias), min 5 (15 famílias, sem Naive Bayes) e corte de
   75% (19 famílias; GaussianNB, mlr:naiveBayes e weka:lwl, com 42 a 43 bases, ficam na borda)
 - Famílias abaixo do corte ficam fora por cobertura. Ex.: xgboost do mlr (22 das 60 bases)
   é limitação registrada, sem tratamento especial
 - sklearn:FKCEigenPro: pacote sklearn_extra (`fast_kernel`), 50.604 runs, 60 bases,
   3 flows (imputação, com ou sem padronização, e uma versão com a classe renomeada
   FKC_EigenPro -> FKCEigenPro), 14.913 setups; agrupada como uma família
-- Evidência: 01_selecao_bases.ipynb, Seção 3 (exec 45–51).
+- Evidência: 01_preparacao_dados.ipynb, Seção 3.
 
-## 9. Viés do número de runs, ruído e agregação principal
-- O máximo cresce com o número de runs: correlação de Spearman entre n e o máximo por
-  base com mediana de 0,46 (geral 0,17), contra 0,07 com a mediana (geral 0,05)
+## 9. Viés do número de runs, agregação exata e sensibilidades
+- O máximo cresce com o número de runs (n) da célula: correlação de Spearman entre n e o
+  máximo por base com mediana de 0,46 (geral 0,17), contra 0,07 com a mediana (geral 0,05)
   -> viés de amostragem, não só qualidade
-- **max_sub3**: para cada célula com n >= 3, sorteia 3 runs sem reposição, toma o máximo
-  e repete 100 vezes (semente 42); o valor é a média desses máximos
-  (máximo esperado de 3 runs aleatórios)
-- Ruído do sorteio, duas medições:
-  - R = 200, entre duas sementes (tabelas de comparação com e sem limpeza): mediana
-    0,0003, p95 0,0048, máx. 0,028. É o limiar usado em "mudam acima do ruído" (seção 7).
-   Confirmado: diferença absoluta entre duas sementes (1 e 2), R = 200 (01_selecao_bases.ipynb, Seção 5, exec 73, e Seção 6, exec 74 e 76).
-  - Na `tab_sub3` (R = 100, 5 sementes, 1.114 células): desvio-padrão por célula entre
-    sementes com mediana 0,00066, média 0,0015, p95 0,0059 e máx. 0,0217; maior
-    amplitude (máx. - mín.) numa célula 0,058. As duas medições usam estatísticas e
-    valores de R diferentes e não são diretamente comparáveis
-- Teto de Spearman por ruído do sorteio (correlação entre o ranking de duas sementes,
-  por base, 60 bases): mediana 0,992, média 0,9895, quartis 0,985 e 0,997, mín. 0,936,
-  máx. 1,000. O sorteio quase não altera o ranking das famílias. Isso mede só o ruído do
-  sorteio, não a incerteza da própria amostra de runs
+- **max_sub3**: para cada célula com n >= 3, esperança exata do máximo de k = 3 runs
+  sorteados sem reposição, calculada analiticamente sobre os valores ordenados da célula
+  (`emax_exact`: soma de v(i) · C(i-1, 2) / C(n, 3)). Mitiga o viés de volume de runs sem
+  introduzir ruído de simulação ou dependência de semente (restam apenas a incerteza da
+  própria amostra de runs disponível no OpenML e o limiar de materialidade fixo LIM = 0,005)
 - Distância de AUC entre famílias vizinhas no ranking de cada base (1.054 distâncias na
-  `tab_sub3`): mediana 0,0030, média 0,0084, quartis 0,00078 e 0,0087, máx. 0,18. Cerca de
-  um quarto dos pares vizinhos está a menos de ~0,0008, da ordem do ruído; a ordem entre
-  famílias quase empatadas é instável
-- Correlação de ranking por base entre max e max_sub3: mediana 0,74 (média 0,72, mín.
+  `tab_sub3`): mediana 0,0029, média 0,0083, quartis 0,00082 e 0,0088, máx. 0,17. Cerca de
+  um quarto dos pares vizinhos está separado por menos de 0,00082 em AUC (abaixo do limiar
+  de materialidade de 0,005); a ordem estrita entre famílias quase empatadas é instável
+- Correlação de ranking por base entre max e max_sub3: mediana 0,73 (média 0,72, mín.
   0,36, máx. 0,94)
-- Robustez do k: max_sub3 contra max_sub10 com mediana 0,925 (média 0,90, mín. 0,67,
+- Robustez do k: max_sub3 contra max_sub10 com mediana 0,93 (média 0,91, mín. 0,66,
   máx. 1,0), usando só as 823 das 1.114 células com n >= 10; **mantido k = 3** para não
   perder células de famílias com poucos runs
-- Movimento de ranking (max -> max_sub3, média por família): SVC -10,1;
-  GradientBoosting -6,7; attributeselectedclassifier -3,3; RandomForest +0,1;
-  DecisionTree +0,3; FKCEigenPro +0,7; sobem sobretudo famílias com poucos runs
-  (até +3,2). Interpretação: o max_sub3 também penaliza famílias sensíveis a
-  hiperparâmetros (SVC, GradientBoosting), não só o viés de volume
-- Concordância entre métricas: o melhor (top-1) coincide em 25% das bases; sobreposição
-  do top-3 média de 1,6 de 3 (0 em 7 bases, 3 em 11). HistGradientBoosting é o melhor
-  em posto médio nas duas (3,34 e 2,83), seguido do RandomForest (3,53 e 3,43); SVC vai
-  de 4,54 a 14,68 e GradientBoosting de 6,17 a 12,89
+- Movimento de ranking (max -> max_sub3, média por família): SVC -10,2;
+  GradientBoosting -7,0; attributeselectedclassifier -3,5; RandomForest +0,1;
+  DecisionTree +0,2; FKCEigenPro +0,8; sobem sobretudo famílias com poucos runs
+  (até +3,25, em weka:logistic). Interpretação: o max_sub3 também penaliza famílias
+  sensíveis a hiperparâmetros (SVC, GradientBoosting), não só o viés de volume
+- Concordância entre `max` e `max_sub3`: a família vencedora (1º lugar) é a mesma em 26,7%
+  das bases (16 de 60). Olhando para o pódio (top-3), as duas métricas compartilham em média
+  1,65 das 3 famílias (o pódio é idêntico em 11 bases e totalmente diferente em 8). Na posição
+  média do ranking (onde 1º é o melhor), `HistGradientBoosting` lidera tanto no `max` (3,34º)
+  quanto no `max_sub3` (2,88º), seguido pelo `RandomForest` (3,53º e 3,40º). Já famílias
+  sensíveis a tuning despencam ao sair do máximo completo para o `max_sub3`: `SVC` cai de
+  4,54º para 14,75º e `GradientBoosting` vai de 6,17º para 13,19º
 - Arrependimento em AUC: escolher pelo max_sub3 e avaliar no máximo perde em média
-  0,003 (mediana 0,0007; máx. 0,028); o inverso perde 0,016 (mediana 0,007; máx. 0,127)
-- **Decisão: max_sub3 (k = 3) é a métrica de agregação principal; o máximo completo é a
-  sensibilidade** (busca extensa de hiperparâmetros). O recomendador é avaliado nas duas
-- Opcional: a esperança exata do máximo de 3 runs (soma de v(i) · C(i-1, 2) / C(n, 3) sobre
-  os valores ordenados) elimina o sorteio; só vale a pena se a tabela for refeita
-- Evidência: 01_selecao_bases.ipynb, Seção 4 (exec 53–57), Seção 5 (exec 73) e Seção 6 (exec 79–81 e 90–93).
+  0,0032 (mediana 0,0008; máx. 0,028); o inverso perde em média 0,016 (mediana 0,0080;
+  máx. 0,126)
+- **Decisão: max_sub3 exato (k = 3) é a métrica de agregação principal; a mediana (`tab_med`)
+  e o máximo completo (`tab_max`) são as sensibilidades.** O recomendador é avaliado nas três
+- Evidência: 01_preparacao_dados.ipynb, Seção 3, Seção 4 e Seção 6.
 
-## 10. Tabelas base × família (`dados/tabelas/`)
+## 10. Tabelas base × família
 - `tab_sub3` (60 × 22), `tab_max` (sensibilidade), `tab_med` (mediana) e `tab_n` (nº de
   runs por célula), em parquet e csv; `celulas_longa.parquet`
 - 206 células faltantes de 1.320 (15,6%), as de n < 3
-- `tab_sub3_sem_limpeza` (max_sub3 do dado bruto, semente 1, R = 200) e
-  `tab_sub3_limpo_mesma_semente` (contraparte com a mesma semente), para comparar
-  limpeza sem diferença de sorteio. Não misturar com `tab_sub3` (semente 42, R = 100)
-- `nucleo_sub3`, `tab_sub3_sem_fracas` e `nucleo_sub3_sem_fracas` (seções 11 e 12)
-- Evidência: 01_selecao_bases.ipynb, Seção 4 (exec 63–64), Seção 5 (exec 72) e Seção 6 (exec 77 e 82–83).
+- `tab_sub3_sem_limpeza` (60 × 22, em parquet e csv): `max_sub3` calculado com `emax_exact`
+  sobre os runs sem limpeza (brutos), diretamente comparável à `tab_sub3` sem diferença de
+  sorteio ou semente
+- Todas as tabelas usam os runs limpos (v3), exceto `tab_sub3_sem_limpeza`. A comparação
+  do recomendador com e sem limpeza é feita só no max_sub3; o máximo completo e a mediana
+  entram sempre limpos (a mediana bruta mede a degeneração, não a família, como na
+  task 28: 0,9905 limpa contra 0,49998 bruta)
+- `nucleo_sub3`, `tab_sub3_sem_fracas` e `nucleo_sub3_sem_fracas`, também exportadas em
+  parquet e csv (seções 11 e 12)
+- Evidência: 01_preparacao_dados.ipynb, Seção 4, Seção 5 e Seção 6.
 
 ## 11. Células faltantes
 - Distribuição: weka 150 dos 206, mlr 30, sklearn 26. As 6 famílias do sklearn sem
@@ -222,7 +275,7 @@ Efeito da limpeza:
   - Volume: 97,8% dos runs do weka e 99,9% dos do mlr (102.859 de 102.942) são de até 2017; as 14 bases receberam
     104 dos 18.987 runs do weka (0,5%) e 2.057 dos 102.942 do mlr (2%)
   - Causa provável: o lote de tarefas de 2018 surgiu depois da atividade dessas
-    bibliotecas **(não verificada)**
+    bibliotecas
   - Nas bases 14952 e 14954 faltam 10 das 11 famílias weka, sklearn:GaussianNB,
     sklearn:GradientBoostingClassifier e mlr:naiveBayes (na 14954 também mlr:rpart). Das
     células contadas, GaussianNB, GradientBoosting e j48 têm 1 ou 2 runs (abaixo do mínimo
@@ -233,7 +286,7 @@ Efeito da limpeza:
   categóricas: mediana 0,155 fora contra 0,059 no núcleo (p = 0,224), tendência fraca.
   O número total de runs é bem menor fora (prob_sup 0,05), efeito mecânico por faltar
   weka e mlr
-- **Decisão (confirmada em 07/nov/2026)**:
+- **Decisão**:
   - **Resultado principal:** núcleo sem bases fracas, **45 bases × 17 famílias**, sem NaN
   - **Sensibilidade:** 58 bases × 22 famílias (`tab_sub3_sem_fracas`), **sem imputação**: o
     gabarito de cada base é o ranking das famílias observadas nela; o Spearman entre bases
@@ -249,8 +302,7 @@ Efeito da limpeza:
   e weka:lwl
 - Número de faltantes **não** entra como metacaracterística (não existe para uma base
   nova); serve só como diagnóstico
-- Outras sensibilidades: corte de 75% (19 famílias)
-- Evidência: 01_selecao_bases.ipynb, Seção 5 (exec 65–72) e Seção 6 (exec 84–89).
+- Evidência: 01_preparacao_dados.ipynb, Seção 5 e Seção 6.
 
 ## 12. Bases fracas e saturação
 - Bases fracas: 3560 (melhor máximo 0,599; todas as famílias entre 0,52 e 0,60) e
@@ -262,45 +314,67 @@ Efeito da limpeza:
 - Saturação: 28 das 60 bases têm melhor máximo > 0,99, com amplitude mediana de 0,073
   entre as famílias. Em 25% das bases há 5 ou mais famílias a menos de 0,001 do melhor
   (máx. 15). Empates tratados com postos médios (padrão do Spearman)
-- Bases com correlação de ranking baixa entre dado limpo e bruto: 125920 (0,69),
-  23 (0,81), 29, 28 e 3902 (a 29 e a 28 sem explicação ainda)
-- Evidência: 01_selecao_bases.ipynb, Seção 4 (exec 60–62) e Seção 6 (exec 76 e 82).
+- Bases com correlação de ranking baixa entre dado limpo e bruto: 125920 (0,59),
+  23 (0,83), 29 (0,86), 3902 (0,89) e 2074 (0,89)
+- Evidência: 01_preparacao_dados.ipynb, Seção 4, Seção 5 e Seção 6.
 
-## 13. Metacaracterísticas (pymfe) e avaliação (semana 2)
-- pymfe com grupos general, statistical e info-theory (73 metacaracterísticas);
-  codificação das categóricas `one-hot-full` (invariante à renomeação das categorias: com
-  `gray` ou codificação ordinal, 24 a 27 das 73 mudam ao renomear categorias); `attr_conc`
-  descartada (instável entre rodadas idênticas); imputação por mediana (numéricos) e moda
-  (categóricos), por base, **provisória**. 22 das 60 bases têm categóricas e 9 têm
-  valores faltantes
-- NaN residuais do pymfe (2 ou 3 por base: cat_to_num, sd_ratio e, em algumas, can_cor.sd):
-  tratamento **ainda não decidido (a confirmar)**, a decidir com o pymfe rodado nas 60
-  bases. O k-NN não aceita NaN, então precisa estar fechado antes do recomendador
-- Planejado: fração de valores faltantes como metacaracterística e sensibilidade com
-  um imputador melhor (ex.: kNN-imputer) nas 9 bases com faltantes
-- Recomendador: k-NN sobre metacaracterísticas, k = 1, 3, 5, 10, com
-  leave-one-dataset-out; baseline: melhor ranking médio
-- Métricas de avaliação: Spearman, posição real da família recomendada e arrependimento
-  em AUC (diferença entre o melhor da base e a família recomendada). **A métrica
-  principal ainda não está decidida (a confirmar)**; deve ser escolhida antes de rodar o
-  k-NN. O plano anterior tinha o Spearman como principal. Evidências até agora:
-  - o ruído do sorteio não limita o Spearman (teto 0,992);
-  - o ranking muda bastante entre max e max_sub3 (mediana 0,74) e um quarto dos pares
-    vizinhos está no nível do ruído; o arrependimento em AUC é tolerante a trocas entre
-    famílias quase empatadas e mede quanta AUC se perde ao seguir a recomendação
-- Variantes a rodar, por prioridade **(a confirmar)**: `nucleo_sub3_sem_fracas` (principal);
-  `tab_sub3_sem_fracas` (58 × 22, sensibilidade); `tab_sub3` (60 bases); versões com o
-  máximo completo (`tab_max`) no núcleo e nas 58; `tab_sub3_sem_limpeza`
-- Reportar no total e por grupo (bases completas e bases só-sklearn) nas variantes com
-  faltantes. Para o baseline nessas variantes, usar posto normalizado pelo nº de
-  famílias da base ou o núcleo (o posto bruto mistura bases de 7 a 22 famílias)
-- Evidência: 02_pymfe_testes.ipynb (testes preliminares de codificação, instabilidade de attr_conc e atributos categóricos/faltantes).
+## 13. Metacaracterísticas (pymfe) e plano inicial da Fase 2
+
+### O que já está definido (testado na Fase 1)
+- **Grupos e codificação no `pymfe`**: grupos `general`, `statistical` e `info-theory`
+  (73 metacaracterísticas extraídas), com `transform_cat="one-hot-full"` para garantir
+  invariância à renomeação das categorias (nas 22 bases com atributos categóricos,
+  codificações como `gray` ou ordinal alteram de 24 a 27 metacaracterísticas ao permutar
+  rótulos)
+- **Filtro de estabilidade**: descarte de `attr_conc.mean` e `attr_conc.sd` (variam entre
+  rodadas idênticas), restando 71 metacaracterísticas determinísticas
+- **Métricas de avaliação do recomendador**:
+  - **Principal:** **arrependimento em AUC** (diferença entre a AUC da melhor família da
+    base e a AUC da família recomendada), complementado pela taxa de acerto no top-1 e top-3
+  - **Secundária:** correlação de Spearman do ranking completo (mantida para diagnóstico
+    global, mas não como métrica principal porque 28 das 60 bases são saturadas acima de
+    0,99 e um quarto dos pares vizinhos difere por menos de 0,00082 em AUC, abaixo do
+    limiar de materialidade de 0,005)
+- **Variantes de tabelas a avaliar**:
+  1. **Principal:** `nucleo_sub3_sem_fracas` (45 × 17, dados limpos, `max_sub3`)
+  2. **Sensibilidade de cobertura (sem imputação):** `tab_sub3_sem_fracas` (58 × 22),
+     reportada no total e estratificada (bases completas vs. bases só-`sklearn`); o
+     baseline usa posto normalizado pelo nº de famílias observadas na base
+  3. **Sensibilidade de agregação:** mediana (`tab_med`) e máximo completo (`tab_max`)
+  4. **Sensibilidade de limpeza:** `tab_sub3_sem_limpeza` (comparada à versão limpa)
+  5. **Sensibilidade de bases fracas:** `tab_sub3` (60 × 22, incluindo as bases 3560 e 125920)
+
+### Plano preliminar para a Fase 2 (a consolidar após extração completa e estudo do modelo)
+- **Faltantes nas bases originais (9 de 60 bases)**: partir da imputação simples por base
+  antes do `MFE.fit` (mediana nos numéricos, moda nos categóricos) + inclusão da proporção
+  original de faltantes como metacaracterística; avaliar métodos alternativos (ex.:
+  `KNNImputer`) na etapa de modelagem
+- **NaNs residuais do `pymfe` (ex.: `cat_to_num`, `sd_ratio`, `can_cor.sd`)**: regra final
+  a definir após rodar a extração nas 60 bases (descarte de metacaracterísticas com alta
+  proporção de NaN ou variância zero, e imputação/padronização ajustadas estritamente no
+  treino de cada dobra do LODO para evitar vazamento de dados)
+- **Configuração do recomendador ($k$-NN) e baseline**: validação *leave-one-dataset-out*
+  (LODO) comparando $k$-NN sobre metacaracterísticas padronizadas (valores ímpares como
+  $k \in \{1, 3, 5, 7\}$ e/ou ponderação por distância, a refinar na Fase 2) contra o
+  baseline de melhor ranking médio no treino
+- Evidência: `02_pymfe_testes.ipynb` (testes preliminares de codificação categórica,
+  instabilidade de `attr_conc` e comportamento com atributos categóricos/faltantes).
 
 ## 14. Limitações a declarar no relatório
-- Os runs do OpenML não vêm de um experimento controlado: mesmo controlando o volume com o max_sub3 (k = 3), a métrica mistura a qualidade intrínseca da família com quais configurações alguém optou por submeter. Além disso, o max_sub3 penaliza famílias sensíveis a hiperparâmetros, enquanto o máximo completo favorece famílias com mais runs (a mediana tab_med será avaliada como sensibilidade).
-- O resultado depende da regra de limpeza (afeta ~15% das células no max_sub3)
+- Os runs do OpenML não vêm de um experimento controlado: mesmo controlando o volume com
+  o max_sub3 (k = 3), a métrica mistura a qualidade intrínseca da família com quais
+  configurações alguém optou por submeter. Além disso, o max_sub3 penaliza famílias
+  sensíveis a hiperparâmetros, enquanto o máximo completo favorece famílias com mais
+  runs (a mediana tab_med será avaliada como sensibilidade)
+- A AUC multiclasse do OpenML é one-vs-rest ponderada pela frequência das classes e não é
+  comparável em escala com a AUC binária (e herda sensibilidade ao desbalanceamento). O
+  ranking dentro de cada base não depende disso; os usos de valor absoluto sim (limiar
+  de 0,70 das bases fracas, arrependimento). Mitigação: estratificação binárias/multiclasse
+  e sensibilidade com acurácia (seção 15)
+- O resultado depende da regra de limpeza (afeta ~15% das células no max_sub3: 168 de
+  1.114 células)
 - Famílias populares abaixo do corte de cobertura (xgboost, lightgbm) ficam fora
-- Faltantes em bloco: 14 bases (runs de out/2016 a abr/2018) só têm famílias do
+- Faltantes em bloco: 14 bases (runs de out/2016 a abr/2018) têm quase apenas famílias do
   sklearn, então o conjunto de candidatos difere entre os grupos. O resultado principal
   usa o núcleo de 45 bases e perde 5 famílias (mlr:naiveBayes, mlr:rpart,
   sklearn:GaussianNB, sklearn:LogisticRegression e weka:lwl); as bases fora do núcleo
@@ -308,14 +382,49 @@ Efeito da limpeza:
 - Duas bases fracas (3560 e 125920) e muitas saturadas: o ranking nelas é pouco informativo
 - O weka entra com poucos runs por célula (mediana 1), então seu máximo é instável
 - Famílias meta agrupam estimadores internos diferentes
-- O ranking pode mudar com outros runs: o teto de Spearman só mede o ruído do sorteio
+- O ranking depende da amostra finita de runs disponível no OpenML: embora o `emax_exact`
+  elimine o ruído de sorteio, células com poucos runs (como n = 3) ainda refletem apenas
+  as submissões existentes, e pares separados por menos que o limiar de materialidade
+  (LIM = 0,005) podem trocar de posição com novos runs
+- Flows sem prefixo de biblioteca no nome (40 runs nas tabelas, 1 por célula) foram
+  assumidos como weka pelo nome do algoritmo, sem confirmação nos metadados
+- Os limiares da regra de limpeza (200 runs, 0,5% da task, ±0,0005, janela de 0,47 a
+  0,53) não tiveram análise de sensibilidade; o efeito total da limpeza é delimitado pela
+  comparação com e sem limpeza (`tab_sub3_sem_limpeza`)
 
 ## 15. Pendências
-- **Extração das metacaracterísticas (`pymfe`):** calcular os grupos `general`, `statistical` e `info-theory` (com codificação `one-hot-full`) para as 60 bases, incluindo a fração de valores faltantes como metacaracterística.
-- **Pré-processamento das metacaracterísticas:** definir o tratamento definitivo dos `NaN` residuais, infinitos e colunas constantes (avaliando a sensibilidade com `kNN-imputer`) e aplicar normalização antes do cálculo de distâncias.
-- **Baseline de ranking médio:** implementar o recomendador de referência baseado no ranking médio das famílias no conjunto de treino.
-- **Recomendador $k$-NN e validação LODO:** implementar a busca por vizinhos ($k = 1, 3, 5, 10$) e estruturar o protocolo *leave-one-dataset-out* (garantindo que a base de teste não entre no treino nem na normalização).
-- **Métricas de avaliação (Seção 13):** fechar as métricas principais do recomendador (correlação de Spearman, posição real e arrependimento em AUC) no núcleo principal (`45 × 17`).
-- **Comparação binária vs. multiclasse (feedback profa. Juscimara):** estratificar a avaliação do recomendador entre bases binárias (31) e multiclasse (29) para verificar diferenças de comportamento ou escala entre os dois cenários.
-- **Sensibilidade com acurácia vs. AUC (feedback profa. Juscimara):** extrair a tabela de desempenho com acurácia (`predictive_accuracy`) e rodar o recomendador como análise de sensibilidade comparada à AUC, aproveitando sua escala única entre problemas binários e multiclasse.
-- **Avaliação nas sensibilidades já construídas na Fase 1:** rodar o recomendador sobre as tabelas alternativas já geradas (`tab_med` com mediana, `tab_sub3_sem_limpeza` sem descarte de `Dummy`/`ZeroR` e `58 × 22` completa sem imputação).
+- **Extração das metacaracterísticas (`pymfe`):** calcular os grupos `general`,
+  `statistical` e `info-theory` (com codificação `one-hot-full` e descarte de
+  `attr_conc`) para as 60 bases, incluindo a fração original de valores faltantes como
+  metacaracterística.
+- **Pré-processamento das metacaracterísticas:** definir o tratamento definitivo dos
+  `NaN` residuais, infinitos e colunas constantes (avaliando a sensibilidade com
+  `KNNImputer`) e aplicar padronização/normalização antes do cálculo de distâncias.
+- **Baseline de ranking médio:** implementar o recomendador de referência baseado no
+  ranking médio das famílias no conjunto de treino.
+- **Recomendador $k$-NN e validação LODO:** implementar a busca por vizinhos (valores
+  ímpares como $k \in \{1, 3, 5, 7\}$ e/ou ponderação por distância) e estruturar o
+  protocolo *leave-one-dataset-out* (garantindo que a base de teste não entre no treino,
+  na imputação nem na padronização).
+- **Métricas de avaliação (Seção 13):** avaliar o recomendador no núcleo principal
+  (`45 × 17`) usando arrependimento em AUC e acerto no top-1/top-3 como métricas
+  principais, e correlação de Spearman como métrica secundária.
+- **Comparação binária vs. multiclasse (feedback profa. Juscimara):** estratificar a
+  avaliação do recomendador entre bases binárias (31) e multiclasse (29) para verificar
+  diferenças de comportamento ou escala entre os dois cenários.
+- **Sensibilidade com acurácia (feedback profa. Juscimara, fase 2):** extrair a tabela de
+  desempenho com `predictive_accuracy` para as 60 tasks e rodar o recomendador como
+  sensibilidade, depois do resultado principal com a AUC.
+  - Extração: parametrizar `FUNCAO` em `src/extracao_runs.py` (`--funcao`); avaliar
+    limitar a extração aos flows das 22 famílias, conferindo antes que o filtro por
+    flow do `list_evaluations` funciona.
+  - Limpeza: reaproveitar os `run_id` removidos na limpeza da AUC (v3), porque a regra
+    por valor 0,47 a 0,53 não vale para acurácia (o preditor constante tem acurácia
+    igual à proporção da classe majoritária). Antes, conferir que os `run_id` coincidem
+    nas 60 bases.
+  - Comparar: Spearman por base entre os rankings de AUC e de acurácia, e as métricas do
+    recomendador nas duas.
+- **Avaliação nas sensibilidades já construídas na Fase 1:** rodar o recomendador sobre as
+  tabelas alternativas já geradas (`tab_sub3_sem_fracas` 58 × 22 sem imputação, `tab_med`
+  com mediana, `tab_max` com máximo completo, `tab_sub3_sem_limpeza` sem a limpeza e
+  `tab_sub3` 60 × 22 com as bases fracas).
