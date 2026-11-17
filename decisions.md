@@ -1,19 +1,22 @@
 # Decisões de desenho do experimento (versão 1)
 
-Última atualização: 12/nov/2026. Cada decisão traz o motivo e os números que a sustentam.
+Última atualização: 16/nov/2026. Cada decisão traz o motivo e os números que a sustentam.
 Há hipóteses ou escolhas ainda em aberto.
 ---
 
 ## 1. Métrica
-- Escolhida: area_under_roc_curve (AUC), em todas as bases, inclusive multiclasse
-- Métrica principal fixa: AUC.
-- Sensibilidade: acurácia (`predictive_accuracy`), só para verificar se o resultado do
-  recomendador se mantém; não substitui a AUC nem entra no resultado principal.
-- O ranking das famílias dentro de cada base não depende de a AUC ser binária ou
-  multiclasse. A escala só pesa nos usos de valor absoluto: o limiar de 0,70 das bases
-  fracas e o arrependimento médio em AUC entre bases. Por isso os resultados também
-  serão estratificados entre binárias e multiclasse (seção 15).
-- Cobertura: em 3 tasks (3, 6 e 11), AUC e acurácia têm a mesma cobertura de runs e flows
+- Métricas de desempenho (duas, com o mesmo peso): AUC (`area_under_roc_curve`) e acurácia
+  (`predictive_accuracy`), em todas as bases, inclusive multiclasse. O recomendador é
+  avaliado e reportado nas duas.
+- Motivo da acurácia: ela não depende da AUC multiclasse one-vs-rest ponderada do OpenML.
+- Regra para discordância (definida antes de ver os resultados da acurácia): se as duas
+  métricas discordarem, reportam-se as duas e a diferença é discutida.
+- Dentro de cada base, todas as famílias são comparadas pela mesma métrica, então o ranking é
+  comparável. A escala só pesa nos usos de valor absoluto (AUC binária vs. multiclasse
+  ponderada; a acurácia depende da proporção e do número de classes): o limiar de 0,70 das
+  bases fracas e o arrependimento médio entre bases. Por isso os resultados são também
+  estratificados entre binárias e multiclasse, nas duas métricas (seção 15).
+- Cobertura: em 3 tasks (3, 6 e 11), AUC e acurácia têm a mesma cobertura de runs e flows (a conferir nas 60 na extração)
 - Verificação do cálculo (task 11, 3 classes, 5 runs): o valor do OpenML coincide com a AUC
   one-vs-rest ponderada pela frequência das classes, calculada sobre as predições
   agrupadas (maior diferença: 4,6e-7). A média simples entre classes fica abaixo em todos os
@@ -24,7 +27,7 @@ Há hipóteses ou escolhas ainda em aberto.
   (média de 5,34% dos runs por task, máximo 31,56%)
 - Evidência: 01_preparacao_dados.ipynb, Seção 2 (proporção de AUC == 0,5). 
 - Evidência: 01_preparacao_dados.ipynb, Seção 6 (verificação da AUC multiclasse)
-- Composição das 60 tasks: 31 binárias e 29 multiclasse (de 3 a 26 classes); os resultados do recomendador serão reportados também estratificados entre binárias e multiclasse.
+- Composição das 60 tasks: 31 binárias e 29 multiclasse (de 3 a 26 classes); os resultados do recomendador serão reportados também estratificados entre binárias e multiclasse, nas duas métricas (AUC e acurácia).
 
 ## 2. Fonte das bases
 - Suíte OpenML-CC18 (72 tasks de classificação curadas)
@@ -74,8 +77,8 @@ Há hipóteses ou escolhas ainda em aberto.
 ---
 
 ## 6. Extração dos runs
-- Só a métrica `area_under_roc_curve` foi extraída (constante `FUNCAO` em
-  `src/extracao_runs.py`)
+- Na Fase 1 só a métrica `area_under_roc_curve` foi extraída (constante `FUNCAO` em
+  `src/extracao_runs.py`); a acurácia será extraída na Fase 2 (seção 15)
 - `list_evaluations` do OpenML dá erro com size acima de 1000, então a página é de 1000
 - A ordem da listagem padrão não segue run_id nem valor, e o `sort_order` ordena só pelo
   valor da AUC. Por isso foram baixados **todos** os runs das 60 tasks, em duas fases
@@ -239,6 +242,7 @@ das famílias dentro de cada base e a correlação é de Spearman, uma por base,
   máx. 0,126)
 - **Decisão: max_sub3 exato (k = 3) é a métrica de agregação principal; a mediana (`tab_med`)
   e o máximo completo (`tab_max`) são as sensibilidades.** O recomendador é avaliado nas três
+  agregações, em AUC e em acurácia.
 - Evidência: 01_preparacao_dados.ipynb, Seção 3, Seção 4 e Seção 6.
 
 ## 10. Tabelas base × família
@@ -253,6 +257,9 @@ das famílias dentro de cada base e a correlação é de Spearman, uma por base,
   entram sempre limpos (a mediana bruta mede a degeneração, não a família, como na
   task 28: 0,9905 limpa contra 0,49998 bruta)
 - `nucleo_sub3`, `tab_sub3_sem_fracas` e `nucleo_sub3_sem_fracas` (seções 11 e 12)
+- Todas as tabelas acima são de AUC. As equivalentes de acurácia, incluindo a versão sem
+  limpeza, serão geradas na Fase 2: a limpa usa os mesmos `run_id` da limpeza da AUC e a
+  sem limpeza usa todos os runs.
 - Evidência: 01_preparacao_dados.ipynb, Seção 4, Seção 5 e Seção 6.
 
 ## 11. Células faltantes
@@ -285,7 +292,7 @@ das famílias dentro de cada base e a correlação é de Spearman, uma por base,
     gabarito de cada base é o ranking das famílias observadas nela; o Spearman entre bases
     usa só as famílias em comum (mínimo de 5; nenhum par ficou abaixo, o mínimo observado
     é 6). Resultados no total e por grupo (bases completas e bases só-sklearn)
-  - **Descartada:** imputação das células, que inventaria AUC na variável que o
+  - **Descartada:** imputação das células, que inventaria desempenho na variável que o
     recomendador tenta prever, e com falta em bloco o viés seria sistemático
 - Composição do núcleo (17 famílias, sem nenhuma do mlr): sklearn AdaBoost, DecisionTree,
   FKCEigenPro, GradientBoosting, HistGradientBoosting, RandomForest, SVC; weka
@@ -304,6 +311,8 @@ das famílias dentro de cada base e a correlação é de Spearman, uma por base,
   máximo é < 0,70. Gera `tab_sub3_sem_fracas` (58 × 22) e `nucleo_sub3_sem_fracas`
   (45 × 17; só a 3560 sai do núcleo, porque a 125920 já está fora dele). Não se corta
   nada pelo resultado
+- A mesma lista de bases fracas (3560 e 125920) vale para a acurácia: o limiar de 0,70 é
+  definido em AUC e não é recalculado para a acurácia.
 - Saturação: 28 das 60 bases têm melhor máximo > 0,99, com amplitude mediana de 0,073
   entre as famílias. Em 25% das bases há 5 ou mais famílias a menos de 0,001 do melhor
   (máx. 15). Empates tratados com postos médios (padrão do Spearman)
@@ -322,13 +331,14 @@ das famílias dentro de cada base e a correlação é de Spearman, uma por base,
 - **Filtro de estabilidade**: descarte de `attr_conc.mean` e `attr_conc.sd` (variam entre
   rodadas idênticas), restando 71 metacaracterísticas determinísticas
 - **Métricas de avaliação do recomendador**:
-  - **Principal:** **arrependimento em AUC** (diferença entre a AUC da melhor família da
-    base e a AUC da família recomendada), complementado pela taxa de acerto no top-1 e top-3
+  - **Principal:** **arrependimento** (diferença entre o desempenho da melhor família da base
+    e o da família recomendada), calculado em AUC e em acurácia, complementado pela taxa de
+    acerto no top-1 e top-3 (também nas duas métricas)
   - **Secundária:** correlação de Spearman do ranking completo (mantida para diagnóstico
     global, mas não como métrica principal porque 28 das 60 bases são saturadas acima de
     0,99 e um quarto dos pares vizinhos difere por menos de 0,00082 em AUC, abaixo do
     limiar de materialidade de 0,005)
-- **Variantes de tabelas a avaliar**:
+- **Variantes de tabelas a avaliar** (cada uma em AUC e em acurácia):
   1. **Principal:** `nucleo_sub3_sem_fracas` (45 × 17, dados limpos, `max_sub3`)
   2. **Sensibilidade de cobertura (sem imputação):** `tab_sub3_sem_fracas` (58 × 22),
      reportada no total e estratificada (bases completas vs. bases só-`sklearn`); o
@@ -362,8 +372,12 @@ das famílias dentro de cada base e a correlação é de Spearman, uma por base,
 - A AUC multiclasse do OpenML é one-vs-rest ponderada pela frequência das classes e não é
   comparável em escala com a AUC binária (e herda sensibilidade ao desbalanceamento). O
   ranking dentro de cada base não depende disso; os usos de valor absoluto sim (limiar
-  de 0,70 das bases fracas, arrependimento). Mitigação: estratificação binárias/multiclasse
-  e sensibilidade com acurácia (seção 15)
+  de 0,70 das bases fracas, arrependimento). Mitigação: estratificação binárias/multiclasse 
+  e acurácia como segunda métrica (seção 15)
+- A acurácia depende da proporção e do número de classes (um classificador constante já
+  acerta a proporção da classe majoritária), então não é comparável em valor absoluto
+  entre bases. Dentro de cada base o ranking é comparável, porque todas as famílias são
+  avaliadas nos mesmos dados.
 - O resultado depende da regra de limpeza (afeta ~15% das células no max_sub3: 168 de
   1.114 células)
 - Famílias populares abaixo do corte de cobertura (xgboost, lightgbm) ficam fora
@@ -400,24 +414,27 @@ das famílias dentro de cada base e a correlação é de Spearman, uma por base,
   protocolo *leave-one-dataset-out* (garantindo que a base de teste não entre no treino,
   na imputação nem na padronização).
 - **Métricas de avaliação (Seção 13):** avaliar o recomendador no núcleo principal
-  (`45 × 17`) usando arrependimento em AUC e acerto no top-1/top-3 como métricas
-  principais, e correlação de Spearman como métrica secundária.
+  (`45 × 17`) usando arrependimento (em AUC e em acurácia) e acerto no top-1/top-3 (nas duas) 
+  como métricas principais, e correlação de Spearman como métrica secundária.
 - **Comparação binária vs. multiclasse:** estratificar a
-  avaliação do recomendador entre bases binárias (31) e multiclasse (29) para verificar
+  avaliação do recomendador (nas duas métricas) entre bases binárias (31) e multiclasse (29) para verificar
   diferenças de comportamento ou escala entre os dois cenários.
-- **Sensibilidade com acurácia:** extrair a tabela de
-  desempenho com `predictive_accuracy` para as 60 tasks e rodar o recomendador como
-  sensibilidade, depois do resultado principal com a AUC.
+- **Acurácia como segunda métrica:** extrair a tabela de desempenho com `predictive_accuracy`
+  para as 60 tasks e rodar o recomendador nela, com o mesmo peso da AUC; a AUC é fechada
+  primeiro por ordem de execução, não por peso no relatório.
   - Extração: parametrizar `FUNCAO` em `src/extracao_runs.py` (`--funcao`); avaliar
     limitar a extração aos flows das 22 famílias, conferindo antes que o filtro por
-    flow do `list_evaluations` funciona.
+    flow do `list_evaluations` funciona. Se limitar aos flows das 
+    22 famílias, manter também os runs removidos pela limpeza, que a versão sem limpeza precisa.
   - Limpeza: reaproveitar os `run_id` removidos na limpeza da AUC (v3), porque a regra
     por valor 0,47 a 0,53 não vale para acurácia (o preditor constante tem acurácia
     igual à proporção da classe majoritária). Antes, conferir que os `run_id` coincidem
     nas 60 bases.
   - Comparar: Spearman por base entre os rankings de AUC e de acurácia, e as métricas do
     recomendador nas duas.
-- **Avaliação nas sensibilidades já construídas na Fase 1:** rodar o recomendador sobre as
-  tabelas alternativas já geradas (`tab_sub3_sem_fracas` 58 × 22 sem imputação, `tab_med`
-  com mediana, `tab_max` com máximo completo, `tab_sub3_sem_limpeza` sem a limpeza e
-  `tab_sub3` 60 × 22 com as bases fracas).
+- **Avaliação nas sensibilidades:** rodar o recomendador, em AUC e em acurácia, sobre as
+  tabelas alternativas (`tab_sub3_sem_fracas` 58 × 22 sem imputação, `tab_med`, `tab_max`,
+  `tab_sub3_sem_limpeza` e `tab_sub3` 60 × 22), usando as equivalentes de acurácia
+  geradas na Fase 2.
+- **Limiar de materialidade para a acurácia:** definir se LIM = 0,005 (calibrado em AUC)
+  vale também para a acurácia ou se é recalibrado, antes de ver os resultados da acurácia.
