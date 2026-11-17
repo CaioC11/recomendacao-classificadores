@@ -1,6 +1,8 @@
 # Recomendação de Classificadores via Meta-Aprendizado (OpenML-CC18)
 
-Experimento de meta-aprendizado para recomendação de famílias de algoritmos de classificação sobre a suíte **OpenML-CC18**, utilizando histórico público de execuções (*runs*) avaliadas por área sob a curva ROC (`area_under_roc_curve`) e metacaracterísticas extraídas com `pymfe`.
+Experimento de meta-aprendizado para recomendação de famílias de algoritmos de classificação sobre a suíte **OpenML-CC18**, utilizando histórico público de execuções (*runs*) avaliadas por duas métricas: área sob a curva ROC (`area_under_roc_curve`) e acurácia (`predictive_accuracy`); e metacaracterísticas extraídas com `pymfe`. Os resultados do recomendador são reportados nas duas métricas, também estratificados entre bases binárias (31) e multiclasse (29).
+
+> **Estado atual:** a Fase 1 (seleção, limpeza e tabelas base × família) está concluída em AUC. A extração da acurácia, as tabelas equivalentes e o recomendador são a Fase 2.
 
 ## Estrutura do Repositório
 
@@ -32,7 +34,7 @@ recomendacao-classificadores/
         └── tab_n.{csv,parquet}                    #Contagem de runs válidos por célula (60 × 22)
 ```
 
-> **Arquivos locais ignorados no Git (`.gitignore`):** os 3.655 arquivos brutos compactados em `data/runs/task_<id>/pagina_*.csv.gz`, os `.parquet` intermediários consolidados em `data/` (`runs_consolidado.parquet`, `runs_limpos*.parquet`, `runs_v3_familia*.parquet`) e `data/extracao.log` não são versionados devido ao tamanho.
+> **Arquivos locais ignorados no Git (`.gitignore`):** os 3.655 arquivos brutos compactados em `data/runs/task_<id>/pagina_*.csv.gz`, os `.parquet` intermediários consolidados em `data/` (`runs_consolidado.parquet`, `runs_limpos*.parquet`, `runs_v3_familia*.parquet`) e `data/extracao.log` não são versionados devido ao tamanho.Todas as tabelas abaixo são de AUC. As equivalentes de acurácia (principal e sensibilidades) serão geradas na Fase 2, com os mesmos `run_id` da limpeza da AUC. A lista de bases fracas (`3560` e `125920`, definida por `AUC_max < 0,70`) vale para as duas métricas.
 
 ## Tabelas Base × Família (`data/tabelas/`)
 
@@ -79,6 +81,8 @@ Opções disponíveis via `python src/extracao_runs.py --help`:
 - `--task TASK`: baixa apenas uma *task* específica para teste.
 - `--dados DADOS`: diretório base de dados (padrão: `data`).
 - `--limite-fase1 LIMITE_FASE1`: corte de volume de *runs* entre as fases 1 e 2 (padrão: `70000`).
+
+> Na Fase 1 só a AUC foi extraída. A extração da acurácia (parametrizar `FUNCAO` com `--funcao`) é pendência da Fase 2 (ver `decisions.md`, seção 15).
 
 ### 3. Preparação das matrizes e diagnósticos
 
