@@ -2793,3 +2793,5 @@ flow_id,flow_name
 126570,"sklearn.pipeline.Pipeline(prep=sklearn.compose._column_transformer.ColumnTransformer(cat=sklearn.preprocessing._encoders.OrdinalEncoder),clf=sklearn.neighbors._classification.KNeighborsClassifier)(1)"
 126571,"sklearn.pipeline.Pipeline(prep=sklearn.compose._column_transformer.ColumnTransformer(cat=sklearn.preprocessing._encoders.OrdinalEncoder),clf=sklearn.ensemble._forest.RandomForestClassifier)(1)"
 126572,"sklearn.pipeline.Pipeline(prep=sklearn.compose._column_transformer.ColumnTransformer(cat=sklearn.preprocessing._encoders.OrdinalEncoder),clf=sklearn.ensemble._gb.GradientBoostingClassifier)(1)"
+126573,sklearn.pipeline.Pipeline(catboost=catboost.core.CatBoostClassifier)(1)
+126575,sklearn.pipeline.Pipeline(catboost=catboost.core.CatBoostClassifier_balanced)(1)
