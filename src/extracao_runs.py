@@ -5,7 +5,18 @@ from datetime import datetime
 import openml
 import pandas as pd
 
-FUNCAO = "area_under_roc_curve"
+FUNCOES = {
+    "area_under_roc_curve": {
+        "subpasta": "runs",
+        "log": "extracao.log",
+    },
+    
+    "predictive_accuracy": {
+        "subpasta": "runs_acuracia",
+        "log": "extracao_acuracia.log",
+    },
+}
+
 LOTE = 1000
 MAX_OFFSET = 700_000
 ESPERAS = [5, 15, 30, 60, 120]
@@ -38,7 +49,7 @@ def salvar_flows(flows, pasta_dados):
     os.replace(tmp, arq)
 
 
-def baixar_pagina(tid, offset):
+def baixar_pagina(tid, offset, funcao):
     ultimo_erro = None
     for espera in [0] + ESPERAS:
         if espera:
@@ -46,8 +57,12 @@ def baixar_pagina(tid, offset):
             time.sleep(espera)
         try:
             return openml.evaluations.list_evaluations(
-                function=FUNCAO, tasks=[int(tid)], size=LOTE,
-                offset=offset, output_format="dataframe")
+                function=funcao,
+                tasks=[int(tid)],
+                size=LOTE,
+                offset=offset,
+                output_format="dataframe",
+            )
         except openml.exceptions.OpenMLServerNoResult:
             return pd.DataFrame()
         except Exception as e:
@@ -55,15 +70,17 @@ def baixar_pagina(tid, offset):
     raise ultimo_erro
 
 
-def baixar_task(tid, esperado, pasta_dados, flows):
-    pasta = os.path.join(pasta_dados, "runs", f"task_{tid}")
+def baixar_task(tid, esperado, pasta_dados, subpasta_runs, funcao, flows):
+    pasta = os.path.join(pasta_dados, subpasta_runs, f"task_{tid}")
     os.makedirs(pasta, exist_ok=True)
     marca = os.path.join(pasta, "COMPLETA")
     if os.path.exists(marca):
         return None
 
-    paginas = sorted(f for f in os.listdir(pasta)
-                     if f.startswith("pagina_") and f.endswith(".csv.gz"))
+    paginas = sorted(
+        f for f in os.listdir(pasta)
+        if f.startswith("pagina_") and f.endswith(".csv.gz")
+    )
 
     if paginas:
         ultima = pd.read_csv(os.path.join(pasta, paginas[-1]))
@@ -79,15 +96,17 @@ def baixar_task(tid, esperado, pasta_dados, flows):
     t0 = time.time()
     terminou = False
     while offset < MAX_OFFSET:
-        df = baixar_pagina(tid, offset)
+        df = baixar_pagina(tid, offset, funcao)
         if df is None or len(df) == 0:
             terminou = True
             break
 
         faltando = [c for c in COLUNAS_RUNS + ["flow_name"] if c not in df.columns]
         if faltando:
-            raise RuntimeError(f"colunas ausentes na resposta do OpenML: {faltando}. "
-                               f"Colunas recebidas: {df.columns.tolist()}")
+            raise RuntimeError(
+                f"colunas ausentes na resposta do OpenML: {faltando}. "
+                f"Colunas recebidas: {df.columns.tolist()}"
+            )
 
         novos = False
         for fid, nome in df[["flow_id", "flow_name"]].drop_duplicates().itertuples(index=False):
@@ -113,7 +132,7 @@ def baixar_task(tid, esperado, pasta_dados, flows):
             break
 
         if (offset // LOTE) % 10 == 0:
-            parte = f" ({total / esperado:.0%} do esperado)" if esperado else ""
+            parte = f" ({total / esperado:.0%} ref. AUC)" if esperado else ""
             log(f"  task {tid}: {total} runs{parte}, {(time.time() - t0) / 60:.1f} min")
         time.sleep(0.2)
 
@@ -126,25 +145,42 @@ def baixar_task(tid, esperado, pasta_dados, flows):
 
 def main():
     global ARQ_LOG
-    ap = argparse.ArgumentParser(description="Extração de runs do OpenML (AUC)")
+    ap = argparse.ArgumentParser(
+        description=(
+            "Extração completa de runs do OpenML (sem filtro por flow) "
+            "para area_under_roc_curve ou predictive_accuracy."
+        )
+    )
+    ap.add_argument(
+        "--funcao",
+        choices=list(FUNCOES.keys()),
+        default="area_under_roc_curve",
+        help=(
+            "métrica de avaliação do OpenML: 'area_under_roc_curve' (salva em <dados>/runs/) "
+            "ou 'predictive_accuracy' (salva em <dados>/runs_acuracia/) "
+            "(padrão: area_under_roc_curve)"
+        ),
+    )
     ap.add_argument(
         "--fase",
         choices=["1", "2", "todas"],
         default="1",
         help="etapa de extração: 1 (tasks menores), 2 (tasks maiores) ou todas (padrão: 1)",
     )
-    ap.add_argument("--task", type=int, help="baixa só esta task (teste)")
+    ap.add_argument("--task", type=int, help="baixa só esta task (útil para teste de ritmo)")
     ap.add_argument("--dados", default="data", help="pasta de dados (padrão: data)")
     ap.add_argument(
         "--limite-fase1",
         type=int,
-        default=70_000,
-        help="a fase 1 pega tasks com até este nº de runs (padrão: 70000)",
+        default=70000,
+        help="a fase 1 pega tasks com até este nº de runs na referência AUC (padrão: 70000)",
     )
     args = ap.parse_args()
 
-    os.makedirs(os.path.join(args.dados, "runs"), exist_ok=True)
-    ARQ_LOG = os.path.join(args.dados, "extracao.log")
+    cfg = FUNCOES[args.funcao]
+    subpasta_runs = cfg["subpasta"]
+    os.makedirs(os.path.join(args.dados, subpasta_runs), exist_ok=True)
+    ARQ_LOG = os.path.join(args.dados, cfg["log"])
 
     contagem = pd.read_csv(os.path.join(args.dados, "contagem_runs.csv"))
     if args.task:
@@ -160,7 +196,10 @@ def main():
     alvo = alvo.sort_values("runs_aprox")
 
     flows = carregar_flows(args.dados)
-    log(f"início: {len(alvo)} tasks na lista (fase {args.task or args.fase})")
+    log(
+        f"início: função={args.funcao} | saída={subpasta_runs}/ | "
+        f"{len(alvo)} tasks na lista (alvo={args.task or args.fase})"
+    )
 
     ok, puladas, falhas = 0, 0, []
     t_inicio = time.time()
@@ -170,7 +209,7 @@ def main():
             esperado = None if pd.isna(linha.runs_aprox) else int(linha.runs_aprox)
             t0 = time.time()
             try:
-                total = baixar_task(tid, esperado, args.dados, flows)
+                total = baixar_task(tid, esperado, args.dados, subpasta_runs, args.funcao, flows)
             except Exception as e:
                 log(f"[{i}/{len(alvo)}] task {tid}: FALHOU ({e}). Rode de novo para continuar.")
                 falhas.append(tid)
@@ -184,15 +223,19 @@ def main():
             ok += 1
             aviso = ""
             if esperado is not None and abs(total - esperado) > LOTE:
-                aviso = f"  ATENÇÃO: esperado ~{esperado}"
-            log(f"[{i}/{len(alvo)}] task {tid}: completa, {total} runs em "
-                f"{(time.time() - t0) / 60:.1f} min{aviso}")
+                aviso = f"  (ref. AUC: ~{esperado})"
+            log(
+                f"[{i}/{len(alvo)}] task {tid}: completa, {total} runs em "
+                f"{(time.time() - t0) / 60:.1f} min{aviso}"
+            )
     except KeyboardInterrupt:
         log("interrompido pelo usuário. Rode de novo para continuar de onde parou.")
         return
 
-    log(f"fim: {ok} baixadas, {puladas} já completas, {len(falhas)} com falha "
-        f"{falhas if falhas else ''} em {(time.time() - t_inicio) / 60:.1f} min")
+    log(
+        f"fim: {ok} baixadas, {puladas} já completas, {len(falhas)} com falha "
+        f"{falhas if falhas else ''} em {(time.time() - t_inicio) / 60:.1f} min"
+    )
 
 
 if __name__ == "__main__":
